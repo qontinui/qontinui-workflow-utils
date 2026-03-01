@@ -428,6 +428,16 @@ export const GENERATE_SETTINGS_CONFIG: readonly SettingDef[] = [
       "Analyzes project structure to produce a more targeted workflow. " +
       "Adds ~30s to generation time.",
   },
+  {
+    key: "includeDesignGuidance",
+    type: "boolean",
+    label: "Include design guidance",
+    defaultValue: false,
+    tooltip:
+      "Include frontend design quality guidance (typography, color, motion, " +
+      "spatial composition, anti-AI-slop rules) in generated workflows. " +
+      "Enable for design-focused frontend tasks.",
+  },
 ] as const;
 
 // =============================================================================

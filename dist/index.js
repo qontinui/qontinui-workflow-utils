@@ -906,6 +906,13 @@ var GENERATE_SETTINGS_CONFIG = [
     label: "Investigate codebase",
     defaultValue: true,
     tooltip: "Run an AI investigation step before generating the workflow. Analyzes project structure to produce a more targeted workflow. Adds ~30s to generation time."
+  },
+  {
+    key: "includeDesignGuidance",
+    type: "boolean",
+    label: "Include design guidance",
+    defaultValue: false,
+    tooltip: "Include frontend design quality guidance (typography, color, motion, spatial composition, anti-AI-slop rules) in generated workflows. Enable for design-focused frontend tasks."
   }
 ];
 function getVisibleSettings(settings, features) {
@@ -1199,8 +1206,733 @@ function autoNameFromMessage(content, maxLength = 40) {
   if (trimmed.length <= maxLength) return trimmed;
   return trimmed.slice(0, maxLength - 1) + "\u2026";
 }
+
+// src/skills/builtin-skills.ts
+var BUILTIN_SKILLS = [
+  // =========================================================================
+  // Code Quality
+  // =========================================================================
+  {
+    id: "builtin:shell-command",
+    name: "Shell Command",
+    slug: "shell-command",
+    description: "Run an arbitrary shell command",
+    category: "code-quality",
+    tags: ["shell", "command", "script"],
+    icon: "terminal",
+    color: "gray",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [
+      {
+        name: "command",
+        type: "string",
+        label: "Command",
+        description: "Shell command to execute",
+        required: true,
+        placeholder: "npm run build"
+      },
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Directory to run the command in",
+        required: false,
+        placeholder: "./frontend"
+      },
+      {
+        name: "fail_on_error",
+        type: "boolean",
+        label: "Fail on Error",
+        description: "Whether to fail the step if the command exits with a non-zero code",
+        required: false,
+        default: true
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "shell",
+        command: "{{command}}",
+        working_directory: "{{working_directory}}",
+        fail_on_error: "{{fail_on_error}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:lint-project",
+    name: "Lint Project",
+    slug: "lint-project",
+    description: "Run linting checks on the project",
+    category: "code-quality",
+    tags: ["lint", "eslint", "ruff", "code-quality"],
+    icon: "scan-search",
+    color: "cyan",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Project directory to lint",
+        required: false,
+        placeholder: "./frontend"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check",
+        check_type: "lint",
+        working_directory: "{{working_directory}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:format-check",
+    name: "Format Check",
+    slug: "format-check",
+    description: "Check code formatting (Prettier, Black, etc.)",
+    category: "code-quality",
+    tags: ["format", "prettier", "black", "code-quality"],
+    icon: "align-left",
+    color: "cyan",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Project directory to check formatting",
+        required: false,
+        placeholder: "./frontend"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check",
+        check_type: "format",
+        working_directory: "{{working_directory}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:type-check",
+    name: "Type Check",
+    slug: "type-check",
+    description: "Run type checking (TypeScript, mypy, etc.)",
+    category: "code-quality",
+    tags: ["typecheck", "typescript", "mypy", "types"],
+    icon: "file-type",
+    color: "cyan",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Project directory to type-check",
+        required: false,
+        placeholder: "./frontend"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check",
+        check_type: "typecheck",
+        working_directory: "{{working_directory}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:run-check-group",
+    name: "Run Check Group",
+    slug: "run-check-group",
+    description: "Execute a saved group of checks",
+    category: "code-quality",
+    tags: ["check-group", "checks", "quality"],
+    icon: "check-circle",
+    color: "cyan",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "check_group_id",
+        type: "string",
+        label: "Check Group",
+        description: "ID of the check group to run",
+        required: true,
+        placeholder: "Select a check group"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check_group",
+        check_group_id: "{{check_group_id}}"
+      }
+    },
+    source: "builtin"
+  },
+  // =========================================================================
+  // Testing
+  // =========================================================================
+  {
+    id: "builtin:run-tests",
+    name: "Run Tests",
+    slug: "run-tests",
+    description: "Execute a test suite (custom command, Python, etc.)",
+    category: "testing",
+    tags: ["test", "jest", "pytest", "vitest"],
+    icon: "test-tube-2",
+    color: "green",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "test_type",
+        type: "select",
+        label: "Test Type",
+        description: "Type of test runner to use",
+        required: true,
+        default: "custom_command",
+        options: [
+          { label: "Custom Command", value: "custom_command" },
+          { label: "Python (pytest)", value: "python" },
+          { label: "Repository Tests", value: "repository" }
+        ]
+      },
+      {
+        name: "command",
+        type: "string",
+        label: "Test Command",
+        description: "Command to run tests",
+        required: false,
+        placeholder: "npm test"
+      },
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Directory to run tests in",
+        required: false,
+        placeholder: "./"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "test",
+        test_type: "{{test_type}}",
+        command: "{{command}}",
+        working_directory: "{{working_directory}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:playwright-test",
+    name: "Playwright Test",
+    slug: "playwright-test",
+    description: "Run a Playwright browser test",
+    category: "testing",
+    tags: ["playwright", "browser", "e2e", "test"],
+    icon: "test-tube-2",
+    color: "green",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "code",
+        type: "string",
+        label: "Test Code",
+        description: "Playwright test code to execute",
+        required: true,
+        placeholder: "await page.goto('http://localhost:3001');"
+      },
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Project directory with Playwright config",
+        required: false,
+        placeholder: "./frontend"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "test",
+        test_type: "playwright",
+        code: "{{code}}",
+        working_directory: "{{working_directory}}"
+      }
+    },
+    source: "builtin"
+  },
+  // =========================================================================
+  // Deployment
+  // =========================================================================
+  {
+    id: "builtin:ci-cd-status",
+    name: "CI/CD Status Check",
+    slug: "ci-cd-status",
+    description: "Check the status of a CI/CD pipeline run",
+    category: "deployment",
+    tags: ["ci", "cd", "github-actions", "pipeline"],
+    icon: "git-branch",
+    color: "orange",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "repository",
+        type: "string",
+        label: "Repository",
+        description: "GitHub repository (owner/repo)",
+        required: true,
+        placeholder: "owner/repo"
+      },
+      {
+        name: "workflow_name",
+        type: "string",
+        label: "Workflow Name",
+        description: "Name of the CI/CD workflow",
+        required: false,
+        placeholder: "CI"
+      },
+      {
+        name: "branch",
+        type: "string",
+        label: "Branch",
+        description: "Branch to check",
+        required: false,
+        default: "main",
+        placeholder: "main"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check",
+        check_type: "ci_cd",
+        repository: "{{repository}}",
+        workflow_name: "{{workflow_name}}",
+        branch: "{{branch}}"
+      }
+    },
+    source: "builtin"
+  },
+  // =========================================================================
+  // Monitoring
+  // =========================================================================
+  {
+    id: "builtin:api-health-check",
+    name: "API Health Check",
+    slug: "api-health-check",
+    description: "Check that an API endpoint returns the expected status",
+    category: "monitoring",
+    tags: ["health", "http", "api", "status"],
+    icon: "heart-pulse",
+    color: "rose",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "url",
+        type: "string",
+        label: "URL",
+        description: "URL to check",
+        required: true,
+        placeholder: "http://localhost:8000/health"
+      },
+      {
+        name: "expected_status",
+        type: "number",
+        label: "Expected Status",
+        description: "Expected HTTP status code",
+        required: false,
+        default: 200
+      },
+      {
+        name: "timeout",
+        type: "number",
+        label: "Timeout (seconds)",
+        description: "Maximum wait time in seconds",
+        required: false,
+        default: 30
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check",
+        check_type: "http_status",
+        check_url: "{{url}}",
+        expected_status: "{{expected_status}}",
+        timeout_seconds: "{{timeout}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:navigate-to-url",
+    name: "Navigate to URL",
+    slug: "navigate-to-url",
+    description: "Navigate a browser to a URL via UI Bridge",
+    category: "monitoring",
+    tags: ["navigate", "browser", "url", "ui-bridge"],
+    icon: "globe",
+    color: "emerald",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [
+      {
+        name: "url",
+        type: "string",
+        label: "URL",
+        description: "URL to navigate to",
+        required: true,
+        placeholder: "http://localhost:3001"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "ui_bridge",
+        action: "navigate",
+        url: "{{url}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:assert-element",
+    name: "Assert Element",
+    slug: "assert-element",
+    description: "Assert that a UI element exists or matches expected state",
+    category: "monitoring",
+    tags: ["assert", "element", "verify", "ui-bridge"],
+    icon: "check-square",
+    color: "emerald",
+    allowed_phases: ["verification"],
+    parameters: [
+      {
+        name: "target",
+        type: "string",
+        label: "Target Selector",
+        description: "CSS selector or element identifier",
+        required: true,
+        placeholder: "[data-testid='login-button']"
+      },
+      {
+        name: "assert_type",
+        type: "select",
+        label: "Assertion Type",
+        description: "Type of assertion to perform",
+        required: true,
+        default: "exists",
+        options: [
+          { label: "Exists", value: "exists" },
+          { label: "Text Equals", value: "text_equals" },
+          { label: "Contains Text", value: "contains" },
+          { label: "Is Visible", value: "visible" },
+          { label: "Is Enabled", value: "enabled" }
+        ]
+      },
+      {
+        name: "expected",
+        type: "string",
+        label: "Expected Value",
+        description: "Expected text or value (for text_equals/contains)",
+        required: false,
+        placeholder: "Welcome"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "ui_bridge",
+        action: "assert",
+        target: "{{target}}",
+        assert_type: "{{assert_type}}",
+        expected: "{{expected}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:take-snapshot",
+    name: "Take Snapshot",
+    slug: "take-snapshot",
+    description: "Capture a UI Bridge snapshot of the current page state",
+    category: "monitoring",
+    tags: ["snapshot", "capture", "ui-bridge", "state"],
+    icon: "camera",
+    color: "emerald",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "ui_bridge",
+        action: "snapshot"
+      }
+    },
+    source: "builtin"
+  },
+  // =========================================================================
+  // AI Task
+  // =========================================================================
+  {
+    id: "builtin:ai-task",
+    name: "AI Task",
+    slug: "ai-task",
+    description: "Give the AI a task to complete",
+    category: "ai-task",
+    tags: ["ai", "prompt", "task", "agentic"],
+    icon: "message-square",
+    color: "amber",
+    allowed_phases: ["setup", "verification", "agentic", "completion"],
+    parameters: [
+      {
+        name: "content",
+        type: "string",
+        label: "Prompt",
+        description: "Instructions for the AI to follow",
+        required: true,
+        placeholder: "Review the recent changes and suggest improvements..."
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "prompt",
+        content: "{{content}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:ai-verification",
+    name: "AI Verification",
+    slug: "ai-verification",
+    description: "AI-evaluated verification criteria",
+    category: "ai-task",
+    tags: ["ai", "verify", "review", "criteria"],
+    icon: "bot",
+    color: "violet",
+    allowed_phases: ["verification"],
+    parameters: [
+      {
+        name: "content",
+        type: "string",
+        label: "Verification Criteria",
+        description: "Criteria for the AI to evaluate",
+        required: true,
+        placeholder: "Verify that the login page loads correctly..."
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "prompt",
+        content: "{{content}}"
+      }
+    },
+    source: "builtin"
+  },
+  // =========================================================================
+  // Composition
+  // =========================================================================
+  {
+    id: "builtin:run-sub-workflow",
+    name: "Run Sub-Workflow",
+    slug: "run-sub-workflow",
+    description: "Execute another saved workflow inline",
+    category: "composition",
+    tags: ["workflow", "sub-workflow", "compose", "reuse"],
+    icon: "workflow",
+    color: "blue",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [
+      {
+        name: "workflow_id",
+        type: "string",
+        label: "Workflow",
+        description: "ID of the workflow to run",
+        required: true,
+        placeholder: "Select a workflow"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "workflow",
+        workflow_id: "{{workflow_id}}",
+        workflow_name: ""
+      }
+    },
+    source: "builtin"
+  }
+];
+
+// src/skills/skill-registry.ts
+var userSkills = [];
+function registerUserSkills(skills) {
+  userSkills = skills;
+}
+function clearUserSkills() {
+  userSkills = [];
+}
+function getAllSkills() {
+  return [...BUILTIN_SKILLS, ...userSkills];
+}
+function getSkill(id) {
+  return BUILTIN_SKILLS.find((s) => s.id === id) ?? userSkills.find((s) => s.id === id);
+}
+function getSkillBySlug(slug) {
+  return BUILTIN_SKILLS.find((s) => s.slug === slug) ?? userSkills.find((s) => s.slug === slug);
+}
+function getSkillsByPhase(phase) {
+  return getAllSkills().filter((s) => s.allowed_phases.includes(phase));
+}
+function getSkillsByCategory(category) {
+  return getAllSkills().filter((s) => s.category === category);
+}
+function getSkillCategories() {
+  const categories = /* @__PURE__ */ new Set();
+  for (const skill of getAllSkills()) {
+    categories.add(skill.category);
+  }
+  return Array.from(categories);
+}
+function searchSkills(query, filters) {
+  let results = getAllSkills();
+  if (filters?.category) {
+    results = results.filter((s) => s.category === filters.category);
+  }
+  if (filters?.phase) {
+    results = results.filter((s) => s.allowed_phases.includes(filters.phase));
+  }
+  if (filters?.source) {
+    results = results.filter((s) => s.source === filters.source);
+  }
+  if (filters?.tags && filters.tags.length > 0) {
+    results = results.filter(
+      (s) => filters.tags.some((tag) => s.tags.includes(tag))
+    );
+  }
+  const trimmed = query.trim().toLowerCase();
+  if (trimmed) {
+    results = results.filter((skill) => {
+      const haystack = [
+        skill.name,
+        skill.description,
+        skill.slug,
+        ...skill.tags
+      ].join(" ").toLowerCase();
+      return trimmed.split(/\s+/).every((word) => haystack.includes(word));
+    });
+  }
+  return results;
+}
+
+// src/skills/skill-instantiation.ts
+function resolveValue(value, params) {
+  if (typeof value === "string") {
+    const exactMatch = value.match(/^\{\{(\w+)\}\}$/);
+    if (exactMatch) {
+      const paramName = exactMatch[1];
+      return params[paramName];
+    }
+    if (value.includes("{{")) {
+      return value.replace(/\{\{(\w+)\}\}/g, (_, paramName) => {
+        const resolved = params[paramName];
+        return resolved !== void 0 && resolved !== null ? String(resolved) : "";
+      });
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveValue(item, params));
+  }
+  if (value !== null && typeof value === "object") {
+    return resolveObject(value, params);
+  }
+  return value;
+}
+function resolveObject(obj, params) {
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const resolved = resolveValue(value, params);
+    if (resolved !== void 0) {
+      result[key] = resolved;
+    }
+  }
+  return result;
+}
+function buildEffectiveParams(skill, paramValues) {
+  const effective = {};
+  for (const param of skill.parameters) {
+    const userValue = paramValues[param.name];
+    if (userValue !== void 0 && userValue !== null && userValue !== "") {
+      effective[param.name] = userValue;
+    } else if (param.default !== void 0) {
+      effective[param.name] = param.default;
+    }
+  }
+  return effective;
+}
+function instantiateSkill(skill, phase, paramValues) {
+  if (!skill.allowed_phases.includes(phase)) {
+    throw new Error(
+      `Skill "${skill.name}" is not allowed in phase "${phase}". Allowed phases: ${skill.allowed_phases.join(", ")}`
+    );
+  }
+  const effectiveParams = buildEffectiveParams(skill, paramValues);
+  const origin = {
+    skill_id: skill.id,
+    skill_slug: skill.slug,
+    parameter_values: effectiveParams
+  };
+  const templateSteps = skill.template.kind === "single_step" ? [skill.template.step] : skill.template.steps;
+  return templateSteps.map((templateStep, index) => {
+    const resolved = resolveObject(templateStep, effectiveParams);
+    const id = crypto.randomUUID();
+    const name = templateSteps.length > 1 ? `${skill.name} (${index + 1}/${templateSteps.length})` : skill.name;
+    return {
+      id,
+      name,
+      phase,
+      skill_origin: origin,
+      ...resolved
+    };
+  });
+}
+function validateSkillParams(skill, paramValues) {
+  const errors = [];
+  for (const param of skill.parameters) {
+    if (param.required) {
+      const value = paramValues[param.name];
+      if (value === void 0 || value === null || value === "") {
+        errors.push(`"${param.label}" is required`);
+      }
+    }
+  }
+  return errors;
+}
 export {
   AI_SUMMARY_SETTING,
+  BUILTIN_SKILLS,
   CONTEXT_MANAGEMENT_SETTING,
   GENERATE_CLAUDE_MODELS,
   GENERATE_GEMINI_MODELS,
@@ -1225,6 +1957,7 @@ export {
   autoNameFromMessage,
   calculateCompressionSavings,
   canStepExistInPhase,
+  clearUserSkills,
   createDefaultCompressionStatus,
   createDefaultExecutionStatus,
   createDefaultHookStatus,
@@ -1246,6 +1979,7 @@ export {
   generateStepId,
   getAccentColors,
   getActionColors,
+  getAllSkills,
   getBooleanDisplayValue,
   getComplexityDisplayName,
   getConditionStatusText,
@@ -1255,6 +1989,11 @@ export {
   getPhaseCount,
   getSchedulerStatusColor,
   getSeverityColors,
+  getSkill,
+  getSkillBySlug,
+  getSkillCategories,
+  getSkillsByCategory,
+  getSkillsByPhase,
   getStatusColors,
   getStepIconData,
   getStepIconDataWithFallback,
@@ -1268,6 +2007,7 @@ export {
   getVisibleSettings,
   hasCompletedSuccessfully,
   hasConditions,
+  instantiateSkill,
   isScheduledTaskRunning,
   isTaskComplete,
   isTaskFailed,
@@ -1279,6 +2019,9 @@ export {
   normalizeToPhases,
   parseLogSourceValue,
   parseOutputLog,
-  toBooleanStoredValue
+  registerUserSkills,
+  searchSkills,
+  toBooleanStoredValue,
+  validateSkillParams
 };
 //# sourceMappingURL=index.js.map

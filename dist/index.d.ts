@@ -1,4 +1,4 @@
-import { UnifiedStep, WorkflowPhase, UnifiedWorkflow, PromptStep, WorkflowFeatures, WorkflowStage } from '@qontinui/shared-types/workflow';
+import { UnifiedStep, WorkflowPhase, UnifiedWorkflow, PromptStep, WorkflowFeatures, WorkflowStage, SkillDefinition, SkillCategory } from '@qontinui/shared-types/workflow';
 import { AccentColorClasses, ActionColorClasses, SeverityColorClasses, StatusColorClasses } from '@qontinui/shared-types/library';
 import { ScheduleConditions, ScheduleExpression, ScheduledTaskType, ConditionStatus, ScheduledTaskStatus, ScheduledTask } from '@qontinui/shared-types/scheduler';
 import { TaskRun } from '@qontinui/shared-types/task-run';
@@ -264,4 +264,94 @@ declare function parseOutputLog(outputLog: string): ChatMessage[];
  */
 declare function autoNameFromMessage(content: string, maxLength?: number): string;
 
-export { AI_SUMMARY_SETTING, type BooleanSettingDef, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_SETTING, type ModelOption, type NumberSettingDef, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type ProviderOption, REFLECTION_MODE_SETTING, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, calculateCompressionSavings, canStepExistInPhase, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectWorkflowFeatures, formatDuration, formatRelativeTime, formatTokenCount, generateStepId, getAccentColors, getActionColors, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getGenerateModels, getHookTriggerDisplayName, getLogSourceValue, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, isScheduledTaskRunning, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, toBooleanStoredValue };
+/**
+ * Built-in Skill Definitions
+ *
+ * 15 built-in skills that ship with Qontinui. Each skill is a named,
+ * parameterized template that produces pre-configured step(s).
+ *
+ * Skill templates use {{parameter_name}} placeholders that are resolved
+ * at instantiation time by skill-instantiation.ts.
+ */
+
+declare const BUILTIN_SKILLS: readonly SkillDefinition[];
+
+/**
+ * Skill Registry
+ *
+ * Provides search, filter, and lookup functions for skill definitions.
+ * Combines built-in skills with user-created skills into a unified catalog.
+ */
+
+/**
+ * Register user-created skills. Call this when loading from the database.
+ */
+declare function registerUserSkills(skills: SkillDefinition[]): void;
+/**
+ * Clear all registered user skills.
+ */
+declare function clearUserSkills(): void;
+/**
+ * Get all skills (built-in + user).
+ */
+declare function getAllSkills(): SkillDefinition[];
+/**
+ * Get a skill by its ID.
+ */
+declare function getSkill(id: string): SkillDefinition | undefined;
+/**
+ * Get a skill by its slug.
+ */
+declare function getSkillBySlug(slug: string): SkillDefinition | undefined;
+/**
+ * Get all skills allowed in a given phase.
+ */
+declare function getSkillsByPhase(phase: WorkflowPhase): SkillDefinition[];
+/**
+ * Get all skills in a given category.
+ */
+declare function getSkillsByCategory(category: SkillCategory): SkillDefinition[];
+/**
+ * Get all unique categories present in the skill catalog.
+ */
+declare function getSkillCategories(): SkillCategory[];
+interface SkillSearchFilters {
+    category?: SkillCategory;
+    phase?: WorkflowPhase;
+    source?: "builtin" | "user";
+    tags?: string[];
+}
+/**
+ * Search skills by text query and optional filters.
+ *
+ * Text search matches against name, description, slug, and tags.
+ * All filters are AND-combined.
+ */
+declare function searchSkills(query: string, filters?: SkillSearchFilters): SkillDefinition[];
+
+/**
+ * Skill Instantiation
+ *
+ * Resolves a skill template + parameter values into concrete workflow step(s).
+ * This is the core "skill → step" transformation.
+ *
+ * Parameter placeholders in templates use the {{name}} syntax and are replaced
+ * with actual values at instantiation time.
+ */
+
+/**
+ * Instantiate a skill into concrete workflow step(s).
+ *
+ * @param skill - The skill definition to instantiate
+ * @param phase - The workflow phase to assign to the produced step(s)
+ * @param paramValues - User-provided parameter values
+ * @returns Array of concrete steps ready to insert into a workflow
+ */
+declare function instantiateSkill(skill: SkillDefinition, phase: WorkflowPhase, paramValues: Record<string, unknown>): UnifiedStep[];
+/**
+ * Validate that all required parameters are provided.
+ * Returns an array of error messages (empty if valid).
+ */
+declare function validateSkillParams(skill: SkillDefinition, paramValues: Record<string, unknown>): string[];
+
+export { AI_SUMMARY_SETTING, BUILTIN_SKILLS, type BooleanSettingDef, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_SETTING, type ModelOption, type NumberSettingDef, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type ProviderOption, REFLECTION_MODE_SETTING, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectWorkflowFeatures, formatDuration, formatRelativeTime, formatTokenCount, generateStepId, getAccentColors, getActionColors, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getGenerateModels, getHookTriggerDisplayName, getLogSourceValue, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, instantiateSkill, isScheduledTaskRunning, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, registerUserSkills, searchSkills, toBooleanStoredValue, validateSkillParams };
