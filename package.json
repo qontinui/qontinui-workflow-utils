@@ -24,7 +24,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@qontinui/shared-types": "file:../qontinui-schemas/ts"
+    "@qontinui/shared-types": "github:qontinui/qontinui-shared-types"
   },
   "devDependencies": {
     "tsup": "^8.0.0",
