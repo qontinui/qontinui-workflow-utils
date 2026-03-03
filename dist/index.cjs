@@ -21,6 +21,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   AI_SUMMARY_SETTING: () => AI_SUMMARY_SETTING,
+  APPROVAL_GATE_SETTING: () => APPROVAL_GATE_SETTING,
   BUILTIN_SKILLS: () => BUILTIN_SKILLS,
   CONTEXT_MANAGEMENT_SETTING: () => CONTEXT_MANAGEMENT_SETTING,
   GENERATE_CLAUDE_MODELS: () => GENERATE_CLAUDE_MODELS,
@@ -33,20 +34,30 @@ __export(index_exports, {
   LOG_WATCH_SETTING: () => LOG_WATCH_SETTING,
   MAX_ITERATIONS_SETTING: () => MAX_ITERATIONS_SETTING,
   MODELS_BY_PROVIDER: () => MODELS_BY_PROVIDER,
+  MODEL_OVERRIDE_PHASES: () => MODEL_OVERRIDE_PHASES,
+  MODEL_PRESETS: () => MODEL_PRESETS,
   MODEL_SETTING: () => MODEL_SETTING,
+  PER_PHASE_MODEL_SETTING: () => PER_PHASE_MODEL_SETTING,
   PROMPT_TEMPLATE_SETTING: () => PROMPT_TEMPLATE_SETTING,
   PROVIDER_OPTIONS: () => PROVIDER_OPTIONS,
   PROVIDER_SETTING: () => PROVIDER_SETTING,
   REFLECTION_MODE_SETTING: () => REFLECTION_MODE_SETTING,
+  RESOLVED_MODEL_PREVIEW_SETTING: () => RESOLVED_MODEL_PREVIEW_SETTING,
+  SKILL_CATEGORY_ICON_DATA: () => SKILL_CATEGORY_ICON_DATA,
+  SMART_ROUTING_SENTINEL: () => SMART_ROUTING_SENTINEL,
   STEP_ICON_DATA: () => STEP_ICON_DATA,
   STOP_ON_FAILURE_SETTING: () => STOP_ON_FAILURE_SETTING,
   TEST_ICON_DATA: () => TEST_ICON_DATA,
   TIMEOUT_SETTING: () => TIMEOUT_SETTING,
   WORKFLOW_SETTINGS_CONFIG: () => WORKFLOW_SETTINGS_CONFIG,
   autoNameFromMessage: () => autoNameFromMessage,
+  bumpVersion: () => bumpVersion,
   calculateCompressionSavings: () => calculateCompressionSavings,
   canStepExistInPhase: () => canStepExistInPhase,
   clearUserSkills: () => clearUserSkills,
+  compareVersions: () => compareVersions,
+  computeExportChecksum: () => computeExportChecksum,
+  computeSkillChecksum: () => computeSkillChecksum,
   createDefaultCompressionStatus: () => createDefaultCompressionStatus,
   createDefaultExecutionStatus: () => createDefaultExecutionStatus,
   createDefaultHookStatus: () => createDefaultHookStatus,
@@ -61,6 +72,7 @@ __export(index_exports, {
   describeInterval: () => describeInterval,
   describeSchedule: () => describeSchedule,
   describeTaskType: () => describeTaskType,
+  detectPreset: () => detectPreset,
   detectWorkflowFeatures: () => detectWorkflowFeatures,
   formatDuration: () => formatDuration,
   formatRelativeTime: () => formatRelativeTime,
@@ -81,6 +93,7 @@ __export(index_exports, {
   getSkill: () => getSkill,
   getSkillBySlug: () => getSkillBySlug,
   getSkillCategories: () => getSkillCategories,
+  getSkillCategoryIconData: () => getSkillCategoryIconData,
   getSkillsByCategory: () => getSkillsByCategory,
   getSkillsByPhase: () => getSkillsByPhase,
   getStatusColors: () => getStatusColors,
@@ -96,6 +109,8 @@ __export(index_exports, {
   getVisibleSettings: () => getVisibleSettings,
   hasCompletedSuccessfully: () => hasCompletedSuccessfully,
   hasConditions: () => hasConditions,
+  hasUpdate: () => hasUpdate,
+  instantiateComposition: () => instantiateComposition,
   instantiateSkill: () => instantiateSkill,
   isScheduledTaskRunning: () => isScheduledTaskRunning,
   isTaskComplete: () => isTaskComplete,
@@ -108,9 +123,12 @@ __export(index_exports, {
   normalizeToPhases: () => normalizeToPhases,
   parseLogSourceValue: () => parseLogSourceValue,
   parseOutputLog: () => parseOutputLog,
+  parseVersion: () => parseVersion,
   registerUserSkills: () => registerUserSkills,
+  resolveModelForPhase: () => resolveModelForPhase,
   searchSkills: () => searchSkills,
   toBooleanStoredValue: () => toBooleanStoredValue,
+  validateDependencies: () => validateDependencies,
   validateSkillParams: () => validateSkillParams
 });
 module.exports = __toCommonJS(index_exports);
@@ -763,19 +781,23 @@ var PROVIDER_OPTIONS = [
   { value: "openai_api", label: "OpenAI API" },
   { value: "gemini_api", label: "Gemini API" }
 ];
+var SMART_ROUTING_SENTINEL = "__smart__";
 var MODELS_BY_PROVIDER = {
   claude_cli: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
     { value: "claude-opus-4-20250514", label: "Claude Opus 4" }
   ],
   anthropic_api: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
     { value: "claude-opus-4-20250514", label: "Claude Opus 4" }
   ],
   openai_api: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "gpt-4o", label: "GPT-4o" },
     { value: "gpt-4o-mini", label: "GPT-4o Mini" },
     { value: "o1", label: "o1" },
@@ -783,6 +805,7 @@ var MODELS_BY_PROVIDER = {
   ],
   gemini_api: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Fast)" },
     { value: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
@@ -842,6 +865,14 @@ var STOP_ON_FAILURE_SETTING = {
   label: "Stop on failure",
   defaultValue: false,
   tooltip: "Stop the workflow immediately when a step fails instead of continuing."
+};
+var APPROVAL_GATE_SETTING = {
+  key: "approval_gate",
+  type: "boolean",
+  label: "Approval Gate",
+  defaultValue: false,
+  tooltip: "Pause for human review after each agentic phase before continuing to verification",
+  visible: (f) => f.hasAiPrompts
 };
 var LOG_WATCH_SETTING = {
   key: "log_watch_enabled",
@@ -928,6 +959,29 @@ var CONTEXT_MANAGEMENT_SETTING = {
   customType: "context_management",
   visible: (f) => f.hasAiPrompts
 };
+var PER_PHASE_MODEL_SETTING = {
+  key: "model_overrides",
+  type: "custom",
+  label: "Per-Phase Model Selection",
+  customType: "per_phase_model_select",
+  visible: (f) => f.hasAiPrompts
+};
+var RESOLVED_MODEL_PREVIEW_SETTING = {
+  key: "resolved_model_preview",
+  type: "custom",
+  label: "Effective Model Preview",
+  customType: "resolved_model_preview",
+  visible: (f) => f.hasAiPrompts
+};
+var MODEL_OVERRIDE_PHASES = [
+  { key: "setup", label: "Setup Phase" },
+  { key: "agentic", label: "Agentic Phase" },
+  { key: "completion", label: "Completion Phase" },
+  { key: "verification", label: "Verification (generation review)" },
+  { key: "investigation", label: "Investigation (pre-generation)" },
+  { key: "summary", label: "Summary Generation" },
+  { key: "generation", label: "Workflow Generation" }
+];
 var WORKFLOW_SETTINGS_CONFIG = [
   {
     id: "identity",
@@ -954,6 +1008,8 @@ var WORKFLOW_SETTINGS_CONFIG = [
       REFLECTION_MODE_SETTING,
       PROVIDER_SETTING,
       MODEL_SETTING,
+      PER_PHASE_MODEL_SETTING,
+      RESOLVED_MODEL_PREVIEW_SETTING,
       AI_SUMMARY_SETTING
     ]
   },
@@ -973,7 +1029,8 @@ var WORKFLOW_SETTINGS_CONFIG = [
     settings: [
       PROMPT_TEMPLATE_SETTING,
       CONTEXT_MANAGEMENT_SETTING,
-      STOP_ON_FAILURE_SETTING
+      STOP_ON_FAILURE_SETTING,
+      APPROVAL_GATE_SETTING
     ]
   },
   {
@@ -1047,6 +1104,74 @@ function getBooleanDisplayValue(def, storedValue) {
 }
 function toBooleanStoredValue(def, displayValue) {
   return def.invertDisplay ? !displayValue : displayValue;
+}
+var MODEL_PRESETS = [
+  {
+    id: "quality_first",
+    name: "Quality First",
+    description: "Opus for agentic, Sonnet elsewhere",
+    overrides: {
+      agentic: { model: "claude-opus-4-20250514" },
+      setup: { model: "claude-sonnet-4-20250514" },
+      completion: { model: "claude-sonnet-4-20250514" }
+    }
+  },
+  {
+    id: "balanced",
+    name: "Balanced",
+    description: "Sonnet everywhere",
+    overrides: {
+      setup: { model: "claude-sonnet-4-20250514" },
+      agentic: { model: "claude-sonnet-4-20250514" },
+      completion: { model: "claude-sonnet-4-20250514" }
+    }
+  },
+  {
+    id: "smart",
+    name: "Smart Routing",
+    description: "Auto-route by task complexity",
+    overrides: {
+      setup: { model: SMART_ROUTING_SENTINEL },
+      agentic: { model: SMART_ROUTING_SENTINEL },
+      completion: { model: SMART_ROUTING_SENTINEL }
+    }
+  }
+];
+function detectPreset(overrides) {
+  if (!overrides) return "custom";
+  for (const preset of MODEL_PRESETS) {
+    const presetKeys = Object.keys(preset.overrides);
+    const overrideKeys = Object.keys(overrides).filter(
+      (k) => overrides[k]?.model
+    );
+    if (presetKeys.length !== overrideKeys.length) continue;
+    const allMatch = presetKeys.every((key) => {
+      const p = preset.overrides[key];
+      const o = overrides[key];
+      return p?.model === o?.model && (p?.provider ?? "") === (o?.provider ?? "");
+    });
+    if (allMatch) return preset.id;
+  }
+  return "custom";
+}
+function resolveModelForPhase(phase, overrides, workflowModel, globalModel) {
+  const phaseConfig = overrides?.[phase];
+  if (phaseConfig?.model) {
+    if (phaseConfig.model === SMART_ROUTING_SENTINEL) {
+      return { provider: phaseConfig.provider ?? "", model: "Smart (auto)", source: "smart" };
+    }
+    return { provider: phaseConfig.provider ?? "", model: phaseConfig.model, source: "phase" };
+  }
+  if (workflowModel) {
+    if (workflowModel === SMART_ROUTING_SENTINEL) {
+      return { provider: "", model: "Smart (auto)", source: "smart" };
+    }
+    return { provider: "", model: workflowModel, source: "workflow" };
+  }
+  if (globalModel) {
+    return { provider: "", model: globalModel, source: "global" };
+  }
+  return { provider: "", model: "Global Default", source: "global" };
 }
 
 // src/step-validation.ts
@@ -1247,6 +1372,51 @@ var TEST_ICON_DATA = {
     textClass: "text-green-400"
   }
 };
+var SKILL_CATEGORY_ICON_DATA = {
+  "code-quality": {
+    iconId: "scan-search",
+    bgClass: "bg-cyan-500/10",
+    textClass: "text-cyan-400"
+  },
+  testing: {
+    iconId: "test-tube-2",
+    bgClass: "bg-green-500/10",
+    textClass: "text-green-400"
+  },
+  monitoring: {
+    iconId: "heart-pulse",
+    bgClass: "bg-rose-500/10",
+    textClass: "text-rose-400"
+  },
+  "ai-task": {
+    iconId: "bot",
+    bgClass: "bg-amber-500/10",
+    textClass: "text-amber-400"
+  },
+  deployment: {
+    iconId: "rocket",
+    bgClass: "bg-orange-500/10",
+    textClass: "text-orange-400"
+  },
+  composition: {
+    iconId: "workflow",
+    bgClass: "bg-blue-500/10",
+    textClass: "text-blue-400"
+  },
+  custom: {
+    iconId: "puzzle",
+    bgClass: "bg-zinc-500/10",
+    textClass: "text-zinc-400"
+  }
+};
+var DEFAULT_CATEGORY_ICON_DATA = {
+  iconId: "puzzle",
+  bgClass: "bg-zinc-500/10",
+  textClass: "text-zinc-400"
+};
+function getSkillCategoryIconData(category) {
+  return SKILL_CATEGORY_ICON_DATA[category] ?? DEFAULT_CATEGORY_ICON_DATA;
+}
 function getStepIconData(stepType) {
   return STEP_ICON_DATA[stepType] ?? DEFAULT_ICON_DATA;
 }
@@ -1496,6 +1666,37 @@ var BUILTIN_SKILLS = [
         type: "command",
         mode: "check_group",
         check_group_id: "{{check_group_id}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:security-scan",
+    name: "Security Scan",
+    slug: "security-scan",
+    description: "Run security vulnerability scanner",
+    category: "code-quality",
+    tags: ["security", "audit", "vulnerabilities"],
+    icon: "shield-check",
+    color: "red",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Project directory to scan",
+        required: false,
+        placeholder: "./"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check",
+        check_type: "security",
+        working_directory: "{{working_directory}}"
       }
     },
     source: "builtin"
@@ -1806,6 +2007,88 @@ var BUILTIN_SKILLS = [
     },
     source: "builtin"
   },
+  {
+    id: "builtin:ui-execute",
+    name: "UI Execute",
+    slug: "ui-execute",
+    description: "Execute an instruction on the UI via UI Bridge",
+    category: "monitoring",
+    tags: ["execute", "interact", "ui-bridge"],
+    icon: "pointer",
+    color: "emerald",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [
+      {
+        name: "instruction",
+        type: "string",
+        label: "Instruction",
+        description: "Natural language instruction to execute on the UI",
+        required: true,
+        placeholder: "Click the login button"
+      },
+      {
+        name: "target",
+        type: "string",
+        label: "Target Selector",
+        description: "Optional CSS selector or element identifier",
+        required: false,
+        placeholder: "[data-testid='submit']"
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "ui_bridge",
+        action: "execute",
+        instruction: "{{instruction}}",
+        target: "{{target}}"
+      }
+    },
+    source: "builtin"
+  },
+  {
+    id: "builtin:ui-compare",
+    name: "Compare App State",
+    slug: "ui-compare",
+    description: "Compare current app state against a reference snapshot",
+    category: "monitoring",
+    tags: ["compare", "snapshot", "diff", "ui-bridge"],
+    icon: "git-compare-arrows",
+    color: "pink",
+    allowed_phases: ["verification", "completion"],
+    parameters: [
+      {
+        name: "comparison_mode",
+        type: "select",
+        label: "Comparison Mode",
+        description: "How to compare the app state",
+        required: true,
+        default: "structural",
+        options: [
+          { label: "Structural", value: "structural" },
+          { label: "Visual", value: "visual" },
+          { label: "Both", value: "both" }
+        ]
+      },
+      {
+        name: "reference_snapshot_id",
+        type: "string",
+        label: "Reference Snapshot ID",
+        description: "ID of the reference snapshot to compare against",
+        required: false
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "ui_bridge",
+        action: "compare",
+        comparison_mode: "{{comparison_mode}}",
+        reference_snapshot_id: "{{reference_snapshot_id}}"
+      }
+    },
+    source: "builtin"
+  },
   // =========================================================================
   // AI Task
   // =========================================================================
@@ -1899,6 +2182,47 @@ var BUILTIN_SKILLS = [
       }
     },
     source: "builtin"
+  },
+  // =========================================================================
+  // Custom
+  // =========================================================================
+  {
+    id: "builtin:state-exploration",
+    name: "State Exploration",
+    slug: "state-exploration",
+    description: "Run a state exploration configuration",
+    category: "custom",
+    tags: ["exploration", "states", "testing"],
+    icon: "compass",
+    color: "emerald",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [
+      {
+        name: "command",
+        type: "string",
+        label: "Command",
+        description: "Exploration command to execute",
+        required: false,
+        placeholder: "exploration command"
+      },
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Directory to run the exploration in",
+        required: false
+      }
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "shell",
+        command: "{{command}}",
+        working_directory: "{{working_directory}}"
+      }
+    },
+    source: "builtin"
   }
 ];
 
@@ -1950,20 +2274,43 @@ function searchSkills(query, filters) {
   }
   const trimmed = query.trim().toLowerCase();
   if (trimmed) {
-    results = results.filter((skill) => {
-      const haystack = [
-        skill.name,
-        skill.description,
-        skill.slug,
-        ...skill.tags
-      ].join(" ").toLowerCase();
-      return trimmed.split(/\s+/).every((word) => haystack.includes(word));
-    });
+    const words = trimmed.split(/\s+/);
+    const scored = results.map((skill) => {
+      const nameLower = skill.name.toLowerCase();
+      const slugLower = skill.slug.toLowerCase();
+      const descLower = skill.description.toLowerCase();
+      const tagsLower = skill.tags.map((t) => t.toLowerCase());
+      const haystack = [nameLower, descLower, slugLower, ...tagsLower].join(
+        " "
+      );
+      if (!words.every((word) => haystack.includes(word))) {
+        return null;
+      }
+      let score = 0;
+      if (nameLower === trimmed) score += 100;
+      if (slugLower === trimmed) score += 80;
+      for (const word of words) {
+        if (nameLower.includes(word)) score += 10;
+        if (descLower.includes(word)) score += 5;
+        for (const tag of tagsLower) {
+          if (tag.includes(word)) score += 8;
+        }
+      }
+      return { skill, score };
+    }).filter(
+      (x) => x !== null
+    );
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((x) => x.skill);
   }
   return results;
 }
 
 // src/skills/skill-instantiation.ts
+function validateDependencies(skill) {
+  if (!skill.depends_on || skill.depends_on.length === 0) return [];
+  return skill.depends_on.filter((depId) => !getSkill(depId));
+}
 function resolveValue(value, params) {
   if (typeof value === "string") {
     const exactMatch = value.match(/^\{\{(\w+)\}\}$/);
@@ -2015,12 +2362,45 @@ function instantiateSkill(skill, phase, paramValues) {
       `Skill "${skill.name}" is not allowed in phase "${phase}". Allowed phases: ${skill.allowed_phases.join(", ")}`
     );
   }
+  const missingDeps = validateDependencies(skill);
+  if (missingDeps.length > 0) {
+    throw new Error(
+      `Skill "${skill.name}" has missing dependencies: ${missingDeps.join(", ")}`
+    );
+  }
   const effectiveParams = buildEffectiveParams(skill, paramValues);
+  for (const param of skill.parameters) {
+    const val = effectiveParams[param.name];
+    if (val === void 0) continue;
+    if (param.min !== void 0 && typeof val === "number" && val < param.min) {
+      throw new Error(
+        `Parameter "${param.name}" value ${val} is below minimum ${param.min}`
+      );
+    }
+    if (param.max !== void 0 && typeof val === "number" && val > param.max) {
+      throw new Error(
+        `Parameter "${param.name}" value ${val} exceeds maximum ${param.max}`
+      );
+    }
+    if (param.pattern !== void 0 && typeof val === "string") {
+      const re = new RegExp(param.pattern);
+      if (!re.test(val)) {
+        throw new Error(
+          `Parameter "${param.name}" value "${val}" does not match pattern "${param.pattern}"`
+        );
+      }
+    }
+  }
   const origin = {
     skill_id: skill.id,
     skill_slug: skill.slug,
     parameter_values: effectiveParams
   };
+  if (skill.template.kind === "composition") {
+    throw new Error(
+      `Skill "${skill.name}" is a composition skill and cannot be directly instantiated`
+    );
+  }
   const templateSteps = skill.template.kind === "single_step" ? [skill.template.step] : skill.template.steps;
   return templateSteps.map((templateStep, index) => {
     const resolved = resolveObject(templateStep, effectiveParams);
@@ -2035,6 +2415,22 @@ function instantiateSkill(skill, phase, paramValues) {
     };
   });
 }
+function instantiateComposition(skill, phase, paramValues) {
+  if (skill.template.kind !== "composition") {
+    throw new Error(`Skill "${skill.name}" is not a composition skill`);
+  }
+  const allSteps = [];
+  for (const ref of skill.template.skill_refs) {
+    const refSkill = getSkill(ref.skill_id);
+    if (!refSkill) {
+      throw new Error(`Referenced skill not found: ${ref.skill_id}`);
+    }
+    const mergedParams = { ...paramValues, ...ref.parameter_overrides };
+    const steps = instantiateSkill(refSkill, phase, mergedParams);
+    allSteps.push(...steps);
+  }
+  return allSteps;
+}
 function validateSkillParams(skill, paramValues) {
   const errors = [];
   for (const param of skill.parameters) {
@@ -2047,9 +2443,81 @@ function validateSkillParams(skill, paramValues) {
   }
   return errors;
 }
+
+// src/skills/skill-checksum.ts
+async function computeSkillChecksum(skill) {
+  const content = [
+    skill.name,
+    skill.slug,
+    skill.description,
+    skill.category,
+    ...skill.tags,
+    JSON.stringify(skill.template),
+    JSON.stringify(skill.parameters),
+    skill.version ?? ""
+  ].join("|");
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function computeExportChecksum(skills) {
+  const individualChecksums = await Promise.all(
+    skills.map(computeSkillChecksum)
+  );
+  const combined = individualChecksums.join("|");
+  const encoder = new TextEncoder();
+  const data = encoder.encode(combined);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// src/skills/skill-versioning.ts
+function parseVersion(version) {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return null;
+  return {
+    major: parseInt(match[1], 10),
+    minor: parseInt(match[2], 10),
+    patch: parseInt(match[3], 10)
+  };
+}
+function bumpVersion(version, type) {
+  const parsed = parseVersion(version);
+  if (!parsed) return "1.0.0";
+  switch (type) {
+    case "major":
+      return `${parsed.major + 1}.0.0`;
+    case "minor":
+      return `${parsed.major}.${parsed.minor + 1}.0`;
+    case "patch":
+      return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}`;
+  }
+}
+function compareVersions(a, b) {
+  const pa = parseVersion(a) ?? { major: 0, minor: 0, patch: 0 };
+  const pb = parseVersion(b) ?? { major: 0, minor: 0, patch: 0 };
+  if (pa.major !== pb.major) return pa.major - pb.major;
+  if (pa.minor !== pb.minor) return pa.minor - pb.minor;
+  return pa.patch - pb.patch;
+}
+function hasUpdate(localSkill, remoteSkill) {
+  if (localSkill.version && remoteSkill.version) {
+    if (compareVersions(remoteSkill.version, localSkill.version) > 0) {
+      return true;
+    }
+  }
+  if (localSkill.checksum && remoteSkill.checksum) {
+    return localSkill.checksum !== remoteSkill.checksum;
+  }
+  return false;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AI_SUMMARY_SETTING,
+  APPROVAL_GATE_SETTING,
   BUILTIN_SKILLS,
   CONTEXT_MANAGEMENT_SETTING,
   GENERATE_CLAUDE_MODELS,
@@ -2062,20 +2530,30 @@ function validateSkillParams(skill, paramValues) {
   LOG_WATCH_SETTING,
   MAX_ITERATIONS_SETTING,
   MODELS_BY_PROVIDER,
+  MODEL_OVERRIDE_PHASES,
+  MODEL_PRESETS,
   MODEL_SETTING,
+  PER_PHASE_MODEL_SETTING,
   PROMPT_TEMPLATE_SETTING,
   PROVIDER_OPTIONS,
   PROVIDER_SETTING,
   REFLECTION_MODE_SETTING,
+  RESOLVED_MODEL_PREVIEW_SETTING,
+  SKILL_CATEGORY_ICON_DATA,
+  SMART_ROUTING_SENTINEL,
   STEP_ICON_DATA,
   STOP_ON_FAILURE_SETTING,
   TEST_ICON_DATA,
   TIMEOUT_SETTING,
   WORKFLOW_SETTINGS_CONFIG,
   autoNameFromMessage,
+  bumpVersion,
   calculateCompressionSavings,
   canStepExistInPhase,
   clearUserSkills,
+  compareVersions,
+  computeExportChecksum,
+  computeSkillChecksum,
   createDefaultCompressionStatus,
   createDefaultExecutionStatus,
   createDefaultHookStatus,
@@ -2090,6 +2568,7 @@ function validateSkillParams(skill, paramValues) {
   describeInterval,
   describeSchedule,
   describeTaskType,
+  detectPreset,
   detectWorkflowFeatures,
   formatDuration,
   formatRelativeTime,
@@ -2110,6 +2589,7 @@ function validateSkillParams(skill, paramValues) {
   getSkill,
   getSkillBySlug,
   getSkillCategories,
+  getSkillCategoryIconData,
   getSkillsByCategory,
   getSkillsByPhase,
   getStatusColors,
@@ -2125,6 +2605,8 @@ function validateSkillParams(skill, paramValues) {
   getVisibleSettings,
   hasCompletedSuccessfully,
   hasConditions,
+  hasUpdate,
+  instantiateComposition,
   instantiateSkill,
   isScheduledTaskRunning,
   isTaskComplete,
@@ -2137,9 +2619,12 @@ function validateSkillParams(skill, paramValues) {
   normalizeToPhases,
   parseLogSourceValue,
   parseOutputLog,
+  parseVersion,
   registerUserSkills,
+  resolveModelForPhase,
   searchSkills,
   toBooleanStoredValue,
+  validateDependencies,
   validateSkillParams
 });
 //# sourceMappingURL=index.cjs.map

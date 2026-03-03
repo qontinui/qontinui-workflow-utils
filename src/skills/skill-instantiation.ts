@@ -14,6 +14,21 @@ import type {
   UnifiedStep,
   WorkflowPhase,
 } from "@qontinui/shared-types/workflow";
+import { getSkill } from "./skill-registry";
+
+// =============================================================================
+// Dependency Validation
+// =============================================================================
+
+/**
+ * Validate that all skill dependencies are available in the registry.
+ * Returns an array of missing dependency IDs (empty if all are satisfied).
+ */
+export function validateDependencies(skill: SkillDefinition): string[] {
+  if (!skill.depends_on || skill.depends_on.length === 0) return [];
+
+  return skill.depends_on.filter((depId) => !getSkill(depId));
+}
 
 // =============================================================================
 // Parameter Resolution
@@ -130,13 +145,51 @@ export function instantiateSkill(
     );
   }
 
+  const missingDeps = validateDependencies(skill);
+  if (missingDeps.length > 0) {
+    throw new Error(
+      `Skill "${skill.name}" has missing dependencies: ${missingDeps.join(", ")}`,
+    );
+  }
+
   const effectiveParams = buildEffectiveParams(skill, paramValues);
+
+  // Validate parameters
+  for (const param of skill.parameters) {
+    const val = effectiveParams[param.name];
+    if (val === undefined) continue;
+
+    if (param.min !== undefined && typeof val === "number" && val < param.min) {
+      throw new Error(
+        `Parameter "${param.name}" value ${val} is below minimum ${param.min}`,
+      );
+    }
+    if (param.max !== undefined && typeof val === "number" && val > param.max) {
+      throw new Error(
+        `Parameter "${param.name}" value ${val} exceeds maximum ${param.max}`,
+      );
+    }
+    if (param.pattern !== undefined && typeof val === "string") {
+      const re = new RegExp(param.pattern);
+      if (!re.test(val)) {
+        throw new Error(
+          `Parameter "${param.name}" value "${val}" does not match pattern "${param.pattern}"`,
+        );
+      }
+    }
+  }
 
   const origin: SkillOrigin = {
     skill_id: skill.id,
     skill_slug: skill.slug,
     parameter_values: effectiveParams,
   };
+
+  if (skill.template.kind === "composition") {
+    throw new Error(
+      `Skill "${skill.name}" is a composition skill and cannot be directly instantiated`,
+    );
+  }
 
   const templateSteps =
     skill.template.kind === "single_step"
@@ -163,6 +216,36 @@ export function instantiateSkill(
       ...resolved,
     } as UnifiedStep;
   });
+}
+
+/**
+ * Instantiate a composition skill by resolving its skill_refs.
+ *
+ * Each SkillRef is looked up via `getSkill` and instantiated individually.
+ * Returns all resulting steps flattened.
+ */
+export function instantiateComposition(
+  skill: SkillDefinition,
+  phase: WorkflowPhase,
+  paramValues: Record<string, unknown>,
+): UnifiedStep[] {
+  if (skill.template.kind !== "composition") {
+    throw new Error(`Skill "${skill.name}" is not a composition skill`);
+  }
+
+  const allSteps: UnifiedStep[] = [];
+  for (const ref of skill.template.skill_refs) {
+    const refSkill = getSkill(ref.skill_id);
+    if (!refSkill) {
+      throw new Error(`Referenced skill not found: ${ref.skill_id}`);
+    }
+
+    const mergedParams = { ...paramValues, ...ref.parameter_overrides };
+    const steps = instantiateSkill(refSkill, phase, mergedParams);
+    allSteps.push(...steps);
+  }
+
+  return allSteps;
 }
 
 /**

@@ -3,7 +3,7 @@ import { AccentColorClasses, ActionColorClasses, SeverityColorClasses, StatusCol
 import { ScheduleConditions, ScheduleExpression, ScheduledTaskType, ConditionStatus, ScheduledTaskStatus, ScheduledTask } from '@qontinui/shared-types/scheduler';
 import { TaskRun } from '@qontinui/shared-types/task-run';
 import { CompressionStatus, ExecutionStatus, HookStatus, RetryStatus, RoutingStatus, SubStepStatusDisplay } from '@qontinui/shared-types/execution';
-import { ChatMessage } from '@qontinui/shared-types';
+import { ModelOverrides, ChatMessage } from '@qontinui/shared-types';
 
 declare function generateStepId(): string;
 declare function createSummaryStep(): PromptStep;
@@ -127,6 +127,8 @@ interface ModelOption {
 }
 /** Provider options for workflow-level AI override */
 declare const PROVIDER_OPTIONS: readonly ProviderOption[];
+/** Sentinel value for smart auto-routing (router decides model by complexity). */
+declare const SMART_ROUTING_SENTINEL = "__smart__";
 /** Model options per provider */
 declare const MODELS_BY_PROVIDER: Record<string, readonly ModelOption[]>;
 /** Provider options for the AI generate panel (different set — no "Use Default") */
@@ -150,6 +152,7 @@ declare function getLogSourceValue(selection: LogSourceSelection | undefined | n
 declare function parseLogSourceValue(value: string): LogSourceSelection | undefined;
 declare const REFLECTION_MODE_SETTING: BooleanSettingDef;
 declare const STOP_ON_FAILURE_SETTING: BooleanSettingDef;
+declare const APPROVAL_GATE_SETTING: BooleanSettingDef;
 declare const LOG_WATCH_SETTING: BooleanSettingDef;
 declare const HEALTH_CHECK_SETTING: BooleanSettingDef;
 declare const AI_SUMMARY_SETTING: BooleanSettingDef;
@@ -161,6 +164,32 @@ declare const LOG_SOURCE_SETTING: CustomSettingDef;
 declare const HEALTH_CHECK_URLS_SETTING: CustomSettingDef;
 declare const PROMPT_TEMPLATE_SETTING: CustomSettingDef;
 declare const CONTEXT_MANAGEMENT_SETTING: CustomSettingDef;
+declare const PER_PHASE_MODEL_SETTING: CustomSettingDef;
+/** Custom setting definition for the resolved model preview table. */
+declare const RESOLVED_MODEL_PREVIEW_SETTING: CustomSettingDef;
+/** Phase metadata for the per-phase model select UI */
+declare const MODEL_OVERRIDE_PHASES: readonly [{
+    readonly key: "setup";
+    readonly label: "Setup Phase";
+}, {
+    readonly key: "agentic";
+    readonly label: "Agentic Phase";
+}, {
+    readonly key: "completion";
+    readonly label: "Completion Phase";
+}, {
+    readonly key: "verification";
+    readonly label: "Verification (generation review)";
+}, {
+    readonly key: "investigation";
+    readonly label: "Investigation (pre-generation)";
+}, {
+    readonly key: "summary";
+    readonly label: "Summary Generation";
+}, {
+    readonly key: "generation";
+    readonly label: "Workflow Generation";
+}];
 /**
  * Complete settings layout for the workflow editor panel.
  * Sections are rendered in order. Each section's settings are
@@ -188,6 +217,23 @@ declare function getBooleanDisplayValue(def: BooleanSettingDef, storedValue: unk
  * accounting for invertDisplay.
  */
 declare function toBooleanStoredValue(def: BooleanSettingDef, displayValue: boolean): boolean;
+
+interface ModelPreset {
+    id: string;
+    name: string;
+    description: string;
+    overrides: ModelOverrides;
+}
+declare const MODEL_PRESETS: readonly ModelPreset[];
+/** Detect which preset matches the current overrides, or "custom". */
+declare function detectPreset(overrides: ModelOverrides | undefined): string;
+interface ResolvedModelInfo {
+    provider: string;
+    model: string;
+    source: "phase" | "workflow" | "global" | "smart";
+}
+/** Resolve the effective model for a given phase through the fallback chain. */
+declare function resolveModelForPhase(phase: string, overrides: ModelOverrides | undefined, workflowModel: string | undefined, globalModel: string | undefined): ResolvedModelInfo;
 
 /**
  * Step Validation
@@ -235,6 +281,12 @@ interface StepIconData {
 declare const STEP_ICON_DATA: Record<string, StepIconData>;
 /** Test sub-type icon overrides */
 declare const TEST_ICON_DATA: Record<string, StepIconData>;
+/** Icon data for skill categories in the skill catalog */
+declare const SKILL_CATEGORY_ICON_DATA: Record<string, StepIconData>;
+/**
+ * Get icon data for a skill category.
+ */
+declare function getSkillCategoryIconData(category: string): StepIconData;
 /**
  * Get icon data for a step type string.
  */
@@ -267,7 +319,7 @@ declare function autoNameFromMessage(content: string, maxLength?: number): strin
 /**
  * Built-in Skill Definitions
  *
- * 15 built-in skills that ship with Qontinui. Each skill is a named,
+ * 19 built-in skills that ship with Qontinui. Each skill is a named,
  * parameterized template that produces pre-configured step(s).
  *
  * Skill templates use {{parameter_name}} placeholders that are resolved
@@ -318,7 +370,7 @@ declare function getSkillCategories(): SkillCategory[];
 interface SkillSearchFilters {
     category?: SkillCategory;
     phase?: WorkflowPhase;
-    source?: "builtin" | "user";
+    source?: "builtin" | "user" | "community";
     tags?: string[];
 }
 /**
@@ -340,6 +392,11 @@ declare function searchSkills(query: string, filters?: SkillSearchFilters): Skil
  */
 
 /**
+ * Validate that all skill dependencies are available in the registry.
+ * Returns an array of missing dependency IDs (empty if all are satisfied).
+ */
+declare function validateDependencies(skill: SkillDefinition): string[];
+/**
  * Instantiate a skill into concrete workflow step(s).
  *
  * @param skill - The skill definition to instantiate
@@ -349,9 +406,72 @@ declare function searchSkills(query: string, filters?: SkillSearchFilters): Skil
  */
 declare function instantiateSkill(skill: SkillDefinition, phase: WorkflowPhase, paramValues: Record<string, unknown>): UnifiedStep[];
 /**
+ * Instantiate a composition skill by resolving its skill_refs.
+ *
+ * Each SkillRef is looked up via `getSkill` and instantiated individually.
+ * Returns all resulting steps flattened.
+ */
+declare function instantiateComposition(skill: SkillDefinition, phase: WorkflowPhase, paramValues: Record<string, unknown>): UnifiedStep[];
+/**
  * Validate that all required parameters are provided.
  * Returns an array of error messages (empty if valid).
  */
 declare function validateSkillParams(skill: SkillDefinition, paramValues: Record<string, unknown>): string[];
 
-export { AI_SUMMARY_SETTING, BUILTIN_SKILLS, type BooleanSettingDef, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_SETTING, type ModelOption, type NumberSettingDef, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type ProviderOption, REFLECTION_MODE_SETTING, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectWorkflowFeatures, formatDuration, formatRelativeTime, formatTokenCount, generateStepId, getAccentColors, getActionColors, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getGenerateModels, getHookTriggerDisplayName, getLogSourceValue, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, instantiateSkill, isScheduledTaskRunning, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, registerUserSkills, searchSkills, toBooleanStoredValue, validateSkillParams };
+/**
+ * Skill Checksum Utilities
+ *
+ * SHA-256 checksums for skill integrity verification on export/import.
+ */
+
+/**
+ * Compute a SHA-256 checksum of a skill's content.
+ * Only hashes deterministic content fields (not usage_count, approval_status).
+ */
+declare function computeSkillChecksum(skill: SkillDefinition): Promise<string>;
+/**
+ * Compute a checksum for an entire skill export.
+ */
+declare function computeExportChecksum(skills: SkillDefinition[]): Promise<string>;
+
+/**
+ * Skill Versioning Utilities
+ *
+ * Provides semantic version bumping and update detection for skills.
+ */
+type VersionBumpType = "patch" | "minor" | "major";
+/**
+ * Parse a semantic version string into components.
+ */
+declare function parseVersion(version: string): {
+    major: number;
+    minor: number;
+    patch: number;
+} | null;
+/**
+ * Bump a semantic version string.
+ */
+declare function bumpVersion(version: string, type: VersionBumpType): string;
+/**
+ * Compare two version strings. Returns:
+ * - positive if a > b
+ * - negative if a < b
+ * - 0 if equal
+ */
+declare function compareVersions(a: string, b: string): number;
+/**
+ * Check if a skill has an available update based on checksum comparison.
+ *
+ * @param localSkill - The locally installed skill
+ * @param remoteSkill - The skill from the remote source (import file, org catalog)
+ * @returns true if the remote version is newer or has different content
+ */
+declare function hasUpdate(localSkill: {
+    version?: string;
+    checksum?: string;
+}, remoteSkill: {
+    version?: string;
+    checksum?: string;
+}): boolean;
+
+export { AI_SUMMARY_SETTING, APPROVAL_GATE_SETTING, BUILTIN_SKILLS, type BooleanSettingDef, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_OVERRIDE_PHASES, MODEL_PRESETS, MODEL_SETTING, type ModelOption, type ModelPreset, type NumberSettingDef, PER_PHASE_MODEL_SETTING, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type ProviderOption, REFLECTION_MODE_SETTING, RESOLVED_MODEL_PREVIEW_SETTING, type ResolvedModelInfo, SKILL_CATEGORY_ICON_DATA, SMART_ROUTING_SENTINEL, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, type VersionBumpType, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, bumpVersion, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, compareVersions, computeExportChecksum, computeSkillChecksum, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectPreset, detectWorkflowFeatures, formatDuration, formatRelativeTime, formatTokenCount, generateStepId, getAccentColors, getActionColors, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getGenerateModels, getHookTriggerDisplayName, getLogSourceValue, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillCategoryIconData, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, hasUpdate, instantiateComposition, instantiateSkill, isScheduledTaskRunning, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, parseVersion, registerUserSkills, resolveModelForPhase, searchSkills, toBooleanStoredValue, validateDependencies, validateSkillParams };

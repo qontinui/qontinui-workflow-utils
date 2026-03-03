@@ -101,7 +101,7 @@ export function getSkillCategories(): SkillCategory[] {
 export interface SkillSearchFilters {
   category?: SkillCategory;
   phase?: WorkflowPhase;
-  source?: "builtin" | "user";
+  source?: "builtin" | "user" | "community";
   tags?: string[];
 }
 
@@ -133,20 +133,42 @@ export function searchSkills(
     );
   }
 
-  // Apply text search
+  // Apply text search with relevance scoring
   const trimmed = query.trim().toLowerCase();
   if (trimmed) {
-    results = results.filter((skill) => {
-      const haystack = [
-        skill.name,
-        skill.description,
-        skill.slug,
-        ...skill.tags,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return trimmed.split(/\s+/).every((word) => haystack.includes(word));
-    });
+    const words = trimmed.split(/\s+/);
+    const scored = results
+      .map((skill) => {
+        const nameLower = skill.name.toLowerCase();
+        const slugLower = skill.slug.toLowerCase();
+        const descLower = skill.description.toLowerCase();
+        const tagsLower = skill.tags.map((t) => t.toLowerCase());
+        const haystack = [nameLower, descLower, slugLower, ...tagsLower].join(
+          " ",
+        );
+
+        if (!words.every((word) => haystack.includes(word))) {
+          return null;
+        }
+
+        let score = 0;
+        if (nameLower === trimmed) score += 100;
+        if (slugLower === trimmed) score += 80;
+        for (const word of words) {
+          if (nameLower.includes(word)) score += 10;
+          if (descLower.includes(word)) score += 5;
+          for (const tag of tagsLower) {
+            if (tag.includes(word)) score += 8;
+          }
+        }
+        return { skill, score };
+      })
+      .filter(
+        (x): x is { skill: SkillDefinition; score: number } => x !== null,
+      );
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((x) => x.skill);
   }
 
   return results;

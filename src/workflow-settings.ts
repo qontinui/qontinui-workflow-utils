@@ -93,20 +93,26 @@ export const PROVIDER_OPTIONS: readonly ProviderOption[] = [
   { value: "gemini_api", label: "Gemini API" },
 ] as const;
 
+/** Sentinel value for smart auto-routing (router decides model by complexity). */
+export const SMART_ROUTING_SENTINEL = "__smart__";
+
 /** Model options per provider */
 export const MODELS_BY_PROVIDER: Record<string, readonly ModelOption[]> = {
   claude_cli: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
     { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
   ],
   anthropic_api: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
     { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
   ],
   openai_api: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "gpt-4o", label: "GPT-4o" },
     { value: "gpt-4o-mini", label: "GPT-4o Mini" },
     { value: "o1", label: "o1" },
@@ -114,6 +120,7 @@ export const MODELS_BY_PROVIDER: Record<string, readonly ModelOption[]> = {
   ],
   gemini_api: [
     { value: "", label: "Default" },
+    { value: SMART_ROUTING_SENTINEL, label: "Smart (auto-route by complexity)" },
     { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Fast)" },
     { value: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
@@ -218,6 +225,15 @@ export const STOP_ON_FAILURE_SETTING: BooleanSettingDef = {
   tooltip: "Stop the workflow immediately when a step fails instead of continuing.",
 };
 
+export const APPROVAL_GATE_SETTING: BooleanSettingDef = {
+  key: "approval_gate",
+  type: "boolean",
+  label: "Approval Gate",
+  defaultValue: false,
+  tooltip: "Pause for human review after each agentic phase before continuing to verification",
+  visible: (f) => f.hasAiPrompts,
+};
+
 export const LOG_WATCH_SETTING: BooleanSettingDef = {
   key: "log_watch_enabled",
   type: "boolean",
@@ -314,6 +330,34 @@ export const CONTEXT_MANAGEMENT_SETTING: CustomSettingDef = {
   visible: (f) => f.hasAiPrompts,
 };
 
+export const PER_PHASE_MODEL_SETTING: CustomSettingDef = {
+  key: "model_overrides",
+  type: "custom",
+  label: "Per-Phase Model Selection",
+  customType: "per_phase_model_select",
+  visible: (f) => f.hasAiPrompts,
+};
+
+/** Custom setting definition for the resolved model preview table. */
+export const RESOLVED_MODEL_PREVIEW_SETTING: CustomSettingDef = {
+  key: "resolved_model_preview",
+  type: "custom",
+  label: "Effective Model Preview",
+  customType: "resolved_model_preview",
+  visible: (f) => f.hasAiPrompts,
+};
+
+/** Phase metadata for the per-phase model select UI */
+export const MODEL_OVERRIDE_PHASES = [
+  { key: "setup", label: "Setup Phase" },
+  { key: "agentic", label: "Agentic Phase" },
+  { key: "completion", label: "Completion Phase" },
+  { key: "verification", label: "Verification (generation review)" },
+  { key: "investigation", label: "Investigation (pre-generation)" },
+  { key: "summary", label: "Summary Generation" },
+  { key: "generation", label: "Workflow Generation" },
+] as const;
+
 // =============================================================================
 // Settings Configuration — Workflow Editor
 // =============================================================================
@@ -349,6 +393,8 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
       REFLECTION_MODE_SETTING,
       PROVIDER_SETTING,
       MODEL_SETTING,
+      PER_PHASE_MODEL_SETTING,
+      RESOLVED_MODEL_PREVIEW_SETTING,
       AI_SUMMARY_SETTING,
     ],
   },
@@ -369,6 +415,7 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
       PROMPT_TEMPLATE_SETTING,
       CONTEXT_MANAGEMENT_SETTING,
       STOP_ON_FAILURE_SETTING,
+      APPROVAL_GATE_SETTING,
     ],
   },
   {
@@ -494,4 +541,116 @@ export function toBooleanStoredValue(
   displayValue: boolean,
 ): boolean {
   return def.invertDisplay ? !displayValue : displayValue;
+}
+
+// =============================================================================
+// Model Presets
+// =============================================================================
+
+import type { ModelOverrides } from "@qontinui/shared-types";
+
+export interface ModelPreset {
+  id: string;
+  name: string;
+  description: string;
+  overrides: ModelOverrides;
+}
+
+export const MODEL_PRESETS: readonly ModelPreset[] = [
+  {
+    id: "quality_first",
+    name: "Quality First",
+    description: "Opus for agentic, Sonnet elsewhere",
+    overrides: {
+      agentic: { model: "claude-opus-4-20250514" },
+      setup: { model: "claude-sonnet-4-20250514" },
+      completion: { model: "claude-sonnet-4-20250514" },
+    },
+  },
+  {
+    id: "balanced",
+    name: "Balanced",
+    description: "Sonnet everywhere",
+    overrides: {
+      setup: { model: "claude-sonnet-4-20250514" },
+      agentic: { model: "claude-sonnet-4-20250514" },
+      completion: { model: "claude-sonnet-4-20250514" },
+    },
+  },
+  {
+    id: "smart",
+    name: "Smart Routing",
+    description: "Auto-route by task complexity",
+    overrides: {
+      setup: { model: SMART_ROUTING_SENTINEL },
+      agentic: { model: SMART_ROUTING_SENTINEL },
+      completion: { model: SMART_ROUTING_SENTINEL },
+    },
+  },
+] as const;
+
+/** Detect which preset matches the current overrides, or "custom". */
+export function detectPreset(
+  overrides: ModelOverrides | undefined,
+): string {
+  if (!overrides) return "custom";
+
+  for (const preset of MODEL_PRESETS) {
+    const presetKeys = Object.keys(preset.overrides) as (keyof ModelOverrides)[];
+    const overrideKeys = Object.keys(overrides).filter(
+      (k) => overrides[k as keyof ModelOverrides]?.model,
+    );
+
+    if (presetKeys.length !== overrideKeys.length) continue;
+
+    const allMatch = presetKeys.every((key) => {
+      const p = preset.overrides[key];
+      const o = overrides[key];
+      return p?.model === o?.model && (p?.provider ?? "") === (o?.provider ?? "");
+    });
+
+    if (allMatch) return preset.id;
+  }
+
+  return "custom";
+}
+
+// =============================================================================
+// Resolved Model Preview
+// =============================================================================
+
+export interface ResolvedModelInfo {
+  provider: string;
+  model: string;
+  source: "phase" | "workflow" | "global" | "smart";
+}
+
+/** Resolve the effective model for a given phase through the fallback chain. */
+export function resolveModelForPhase(
+  phase: string,
+  overrides: ModelOverrides | undefined,
+  workflowModel: string | undefined,
+  globalModel: string | undefined,
+): ResolvedModelInfo {
+  const phaseConfig = overrides?.[phase as keyof ModelOverrides];
+
+  if (phaseConfig?.model) {
+    if (phaseConfig.model === SMART_ROUTING_SENTINEL) {
+      return { provider: phaseConfig.provider ?? "", model: "Smart (auto)", source: "smart" };
+    }
+    return { provider: phaseConfig.provider ?? "", model: phaseConfig.model, source: "phase" };
+  }
+
+  if (workflowModel) {
+    if (workflowModel === SMART_ROUTING_SENTINEL) {
+      return { provider: "", model: "Smart (auto)", source: "smart" };
+    }
+    return { provider: "", model: workflowModel, source: "workflow" };
+  }
+
+  if (globalModel) {
+    return { provider: "", model: globalModel, source: "global" };
+  }
+
+  return { provider: "", model: "Global Default", source: "global" };
 }

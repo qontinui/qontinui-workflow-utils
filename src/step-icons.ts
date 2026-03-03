@@ -108,6 +108,62 @@ export const TEST_ICON_DATA: Record<string, StepIconData> = {
 };
 
 // =============================================================================
+// Skill Category Icons
+// =============================================================================
+
+/** Icon data for skill categories in the skill catalog */
+export const SKILL_CATEGORY_ICON_DATA: Record<string, StepIconData> = {
+  "code-quality": {
+    iconId: "scan-search",
+    bgClass: "bg-cyan-500/10",
+    textClass: "text-cyan-400",
+  },
+  testing: {
+    iconId: "test-tube-2",
+    bgClass: "bg-green-500/10",
+    textClass: "text-green-400",
+  },
+  monitoring: {
+    iconId: "heart-pulse",
+    bgClass: "bg-rose-500/10",
+    textClass: "text-rose-400",
+  },
+  "ai-task": {
+    iconId: "bot",
+    bgClass: "bg-amber-500/10",
+    textClass: "text-amber-400",
+  },
+  deployment: {
+    iconId: "rocket",
+    bgClass: "bg-orange-500/10",
+    textClass: "text-orange-400",
+  },
+  composition: {
+    iconId: "workflow",
+    bgClass: "bg-blue-500/10",
+    textClass: "text-blue-400",
+  },
+  custom: {
+    iconId: "puzzle",
+    bgClass: "bg-zinc-500/10",
+    textClass: "text-zinc-400",
+  },
+};
+
+const DEFAULT_CATEGORY_ICON_DATA: StepIconData = {
+  iconId: "puzzle",
+  bgClass: "bg-zinc-500/10",
+  textClass: "text-zinc-400",
+};
+
+/**
+ * Get icon data for a skill category.
+ */
+export function getSkillCategoryIconData(category: string): StepIconData {
+  return SKILL_CATEGORY_ICON_DATA[category] ?? DEFAULT_CATEGORY_ICON_DATA;
+}
+
+// =============================================================================
 // Lookup Functions
 // =============================================================================
 

@@ -13,5 +13,15 @@ export {
 export type { SkillSearchFilters } from "./skill-registry";
 export {
   instantiateSkill,
+  instantiateComposition,
   validateSkillParams,
+  validateDependencies,
 } from "./skill-instantiation";
+export { computeSkillChecksum, computeExportChecksum } from "./skill-checksum";
+export {
+  parseVersion,
+  bumpVersion,
+  compareVersions,
+  hasUpdate,
+  type VersionBumpType,
+} from "./skill-versioning";

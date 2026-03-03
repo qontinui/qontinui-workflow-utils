@@ -1,7 +1,7 @@
 /**
  * Built-in Skill Definitions
  *
- * 15 built-in skills that ship with Qontinui. Each skill is a named,
+ * 19 built-in skills that ship with Qontinui. Each skill is a named,
  * parameterized template that produces pre-configured step(s).
  *
  * Skill templates use {{parameter_name}} placeholders that are resolved
@@ -181,6 +181,38 @@ export const BUILTIN_SKILLS: readonly SkillDefinition[] = [
         type: "command",
         mode: "check_group",
         check_group_id: "{{check_group_id}}",
+      },
+    },
+    source: "builtin",
+  },
+
+  {
+    id: "builtin:security-scan",
+    name: "Security Scan",
+    slug: "security-scan",
+    description: "Run security vulnerability scanner",
+    category: "code-quality",
+    tags: ["security", "audit", "vulnerabilities"],
+    icon: "shield-check",
+    color: "red",
+    allowed_phases: ["setup", "verification"],
+    parameters: [
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Project directory to scan",
+        required: false,
+        placeholder: "./",
+      },
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "check",
+        check_type: "security",
+        working_directory: "{{working_directory}}",
       },
     },
     source: "builtin",
@@ -495,6 +527,89 @@ export const BUILTIN_SKILLS: readonly SkillDefinition[] = [
     source: "builtin",
   },
 
+  {
+    id: "builtin:ui-execute",
+    name: "UI Execute",
+    slug: "ui-execute",
+    description: "Execute an instruction on the UI via UI Bridge",
+    category: "monitoring",
+    tags: ["execute", "interact", "ui-bridge"],
+    icon: "pointer",
+    color: "emerald",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [
+      {
+        name: "instruction",
+        type: "string",
+        label: "Instruction",
+        description: "Natural language instruction to execute on the UI",
+        required: true,
+        placeholder: "Click the login button",
+      },
+      {
+        name: "target",
+        type: "string",
+        label: "Target Selector",
+        description: "Optional CSS selector or element identifier",
+        required: false,
+        placeholder: "[data-testid='submit']",
+      },
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "ui_bridge",
+        action: "execute",
+        instruction: "{{instruction}}",
+        target: "{{target}}",
+      },
+    },
+    source: "builtin",
+  },
+  {
+    id: "builtin:ui-compare",
+    name: "Compare App State",
+    slug: "ui-compare",
+    description: "Compare current app state against a reference snapshot",
+    category: "monitoring",
+    tags: ["compare", "snapshot", "diff", "ui-bridge"],
+    icon: "git-compare-arrows",
+    color: "pink",
+    allowed_phases: ["verification", "completion"],
+    parameters: [
+      {
+        name: "comparison_mode",
+        type: "select",
+        label: "Comparison Mode",
+        description: "How to compare the app state",
+        required: true,
+        default: "structural",
+        options: [
+          { label: "Structural", value: "structural" },
+          { label: "Visual", value: "visual" },
+          { label: "Both", value: "both" },
+        ],
+      },
+      {
+        name: "reference_snapshot_id",
+        type: "string",
+        label: "Reference Snapshot ID",
+        description: "ID of the reference snapshot to compare against",
+        required: false,
+      },
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "ui_bridge",
+        action: "compare",
+        comparison_mode: "{{comparison_mode}}",
+        reference_snapshot_id: "{{reference_snapshot_id}}",
+      },
+    },
+    source: "builtin",
+  },
+
   // =========================================================================
   // AI Task
   // =========================================================================
@@ -586,6 +701,48 @@ export const BUILTIN_SKILLS: readonly SkillDefinition[] = [
         type: "workflow",
         workflow_id: "{{workflow_id}}",
         workflow_name: "",
+      },
+    },
+    source: "builtin",
+  },
+
+  // =========================================================================
+  // Custom
+  // =========================================================================
+  {
+    id: "builtin:state-exploration",
+    name: "State Exploration",
+    slug: "state-exploration",
+    description: "Run a state exploration configuration",
+    category: "custom",
+    tags: ["exploration", "states", "testing"],
+    icon: "compass",
+    color: "emerald",
+    allowed_phases: ["setup", "verification", "completion"],
+    parameters: [
+      {
+        name: "command",
+        type: "string",
+        label: "Command",
+        description: "Exploration command to execute",
+        required: false,
+        placeholder: "exploration command",
+      },
+      {
+        name: "working_directory",
+        type: "string",
+        label: "Working Directory",
+        description: "Directory to run the exploration in",
+        required: false,
+      },
+    ],
+    template: {
+      kind: "single_step",
+      step: {
+        type: "command",
+        mode: "shell",
+        command: "{{command}}",
+        working_directory: "{{working_directory}}",
       },
     },
     source: "builtin",
