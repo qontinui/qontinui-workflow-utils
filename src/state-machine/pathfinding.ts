@@ -173,6 +173,11 @@ export function findPathDijkstra(
     const known = bestCost.get(current.stateId);
     if (known !== undefined && current.cost > known) continue;
 
+    // Target check: when a target is dequeued, it has the optimal cost
+    if (targetSet.has(current.stateId)) {
+      return { found: true, steps: current.path, total_cost: current.cost };
+    }
+
     const entries = adj.get(current.stateId) ?? [];
 
     for (const entry of entries) {
@@ -189,10 +194,6 @@ export function findPathDijkstra(
       const newPath = [...current.path, step];
 
       for (const target of entry.targetStates) {
-        if (targetSet.has(target)) {
-          return { found: true, steps: newPath, total_cost: newCost };
-        }
-
         const prevCost = bestCost.get(target);
         if (prevCost === undefined || newCost < prevCost) {
           bestCost.set(target, newCost);
