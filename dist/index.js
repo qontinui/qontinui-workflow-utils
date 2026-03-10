@@ -113,9 +113,9 @@ function isWorkflowEmpty(workflow) {
   return workflow.setup_steps.length === 0 && workflow.verification_steps.length === 0 && workflow.agentic_steps.length === 0 && hasOnlySummaryStep;
 }
 function getTotalStepCount(workflow) {
-  const topLevelCount = workflow.setup_steps.length + workflow.verification_steps.length + workflow.agentic_steps.length + (workflow.completion_steps ?? []).length;
+  const topLevelCount = (workflow.setup_steps?.length ?? 0) + (workflow.verification_steps?.length ?? 0) + (workflow.agentic_steps?.length ?? 0) + (workflow.completion_steps?.length ?? 0);
   const stagesCount = (workflow.stages ?? []).reduce(
-    (sum, s) => sum + s.setup_steps.length + s.verification_steps.length + s.agentic_steps.length + (s.completion_steps ?? []).length,
+    (sum, s) => sum + (s.setup_steps?.length ?? 0) + (s.verification_steps?.length ?? 0) + (s.agentic_steps?.length ?? 0) + (s.completion_steps?.length ?? 0),
     0
   );
   return topLevelCount + stagesCount;
@@ -384,6 +384,12 @@ var ACCENT_COLORS = {
     bgSolid: "bg-purple-500",
     text: "text-purple-400",
     border: "border-purple-500/30"
+  },
+  rose: {
+    bg: "bg-rose-500/10",
+    bgSolid: "bg-rose-500",
+    text: "text-rose-400",
+    border: "border-rose-500/30"
   },
   slate: {
     bg: "bg-slate-500/10",
@@ -952,6 +958,26 @@ var GENERATE_SETTINGS_CONFIG = [
     label: "Include design guidance",
     defaultValue: false,
     tooltip: "Include frontend design quality guidance (typography, color, motion, spatial composition, anti-AI-slop rules) in generated workflows. Enable for design-focused frontend tasks."
+  },
+  {
+    key: "generateSpecification",
+    type: "boolean",
+    label: "Generate specification",
+    defaultValue: true,
+    tooltip: "Run a specification agent before generating the workflow. Defines acceptance criteria that guide verification step generation. Produces more thorough verification at the cost of ~10-15s additional generation time."
+  },
+  {
+    key: "verificationDepth",
+    type: "select",
+    label: "Verification depth",
+    defaultValue: "standard",
+    options: [
+      { value: "smoke", label: "Smoke \u2014 minimal build/render checks" },
+      { value: "standard", label: "Standard \u2014 spec-driven verification" },
+      { value: "thorough", label: "Thorough \u2014 standard + anomaly detection" },
+      { value: "regression", label: "Regression \u2014 standard + all known issues" }
+    ],
+    description: "Controls how many verification steps are generated. Higher levels include checks for known issues and exploratory anomaly detection."
   }
 ];
 function getVisibleSettings(settings, features) {
@@ -2379,11 +2405,666 @@ function hasUpdate(localSkill, remoteSkill) {
   }
   return false;
 }
+
+// src/state-machine/graph-layout.ts
+var DEFAULT_LAYOUT_OPTIONS = {
+  direction: "TB",
+  nodeWidth: 200,
+  nodeHeight: 150,
+  nodeSep: 50,
+  rankSep: 100
+};
+var STATE_MACHINE_LAYOUT_OPTIONS = {
+  direction: "TB",
+  nodeWidth: 260,
+  nodeHeight: 120,
+  nodeSep: 70,
+  rankSep: 130
+};
+function getNodeSizeTier(elementCount) {
+  if (elementCount <= 4) return { width: 200, gridCols: 3 };
+  if (elementCount <= 10) return { width: 260, gridCols: 4 };
+  if (elementCount <= 18) return { width: 320, gridCols: 5 };
+  return { width: 380, gridCols: 6 };
+}
+var ELEMENT_TYPE_STYLES = {
+  testid: {
+    bg: "bg-blue-500/20",
+    text: "text-blue-300",
+    border: "border-blue-500/30"
+  },
+  role: {
+    bg: "bg-green-500/20",
+    text: "text-green-300",
+    border: "border-green-500/30"
+  },
+  text: {
+    bg: "bg-amber-500/20",
+    text: "text-amber-300",
+    border: "border-amber-500/30"
+  },
+  ui: {
+    bg: "bg-purple-500/20",
+    text: "text-purple-300",
+    border: "border-purple-500/30"
+  },
+  url: {
+    bg: "bg-cyan-500/20",
+    text: "text-cyan-300",
+    border: "border-cyan-500/30"
+  },
+  nav: {
+    bg: "bg-cyan-500/20",
+    text: "text-cyan-300",
+    border: "border-cyan-500/30"
+  }
+};
+var DEFAULT_ELEMENT_TYPE_STYLE = {
+  bg: "bg-gray-500/20",
+  text: "text-gray-300",
+  border: "border-gray-500/30"
+};
+function getElementTypeStyle(elementId) {
+  const prefix = elementId.split(":")[0];
+  return ELEMENT_TYPE_STYLES[prefix] ?? DEFAULT_ELEMENT_TYPE_STYLE;
+}
+function getElementTypePrefix(elementId) {
+  return elementId.split(":")[0];
+}
+var ACTION_TYPE_COLORS = {
+  click: "text-blue-400",
+  doubleClick: "text-blue-400",
+  rightClick: "text-blue-400",
+  type: "text-amber-400",
+  select: "text-purple-400",
+  wait: "text-gray-400",
+  navigate: "text-cyan-400"
+};
+var DEFAULT_ACTION_TYPE_COLOR = "text-gray-400";
+function getActionTypeColor(actionType) {
+  return ACTION_TYPE_COLORS[actionType] ?? DEFAULT_ACTION_TYPE_COLOR;
+}
+function getConfidenceColor(confidence) {
+  if (confidence < 0.5) return "text-red-400";
+  if (confidence < 0.8) return "text-yellow-400";
+  return "text-green-400";
+}
+function getLayoutedElements(dagreLib, nodes, edges, options = {}) {
+  const opts = { ...DEFAULT_LAYOUT_OPTIONS, ...options };
+  const dagreGraph = new dagreLib.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+  dagreGraph.setGraph({
+    rankdir: opts.direction,
+    nodesep: opts.nodeSep,
+    ranksep: opts.rankSep
+  });
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, {
+      width: opts.nodeWidth,
+      height: opts.nodeHeight
+    });
+  });
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+  dagreLib.layout(dagreGraph);
+  const layoutedNodes = nodes.map((node) => {
+    const pos = dagreGraph.node(node.id);
+    return {
+      ...node,
+      position: {
+        x: Math.round(pos.x - opts.nodeWidth / 2),
+        y: Math.round(pos.y - opts.nodeHeight / 2)
+      }
+    };
+  });
+  return { nodes: layoutedNodes, edges };
+}
+function getGridLayoutedElements(nodes, edges, columns = 4, nodeWidth = 200, nodeHeight = 150, spacingX = 50, spacingY = 50) {
+  const layoutedNodes = nodes.map((node, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    return {
+      ...node,
+      position: {
+        x: Math.round(col * (nodeWidth + spacingX) + 100),
+        y: Math.round(row * (nodeHeight + spacingY) + 100)
+      }
+    };
+  });
+  return { nodes: layoutedNodes, edges };
+}
+function getElementLabel(elementId) {
+  const idx = elementId.indexOf(":");
+  return idx > 0 ? elementId.slice(idx + 1) : elementId;
+}
+var ACTION_LABELS = {
+  click: "Click",
+  type: "Type",
+  select: "Select",
+  wait: "Wait",
+  navigate: "Navigate"
+};
+var ACTION_ACTIVE_LABELS = {
+  click: "Clicking...",
+  type: "Typing...",
+  select: "Selecting...",
+  wait: "Waiting...",
+  navigate: "Navigating..."
+};
+var ACTION_COLOR_CONFIG = {
+  click: {
+    text: "text-blue-400",
+    bg: "bg-blue-500/15",
+    border: "border-blue-500/30"
+  },
+  type: {
+    text: "text-amber-400",
+    bg: "bg-amber-500/15",
+    border: "border-amber-500/30"
+  },
+  select: {
+    text: "text-purple-400",
+    bg: "bg-purple-500/15",
+    border: "border-purple-500/30"
+  },
+  wait: {
+    text: "text-gray-400",
+    bg: "bg-gray-500/15",
+    border: "border-gray-500/30"
+  },
+  navigate: {
+    text: "text-cyan-400",
+    bg: "bg-cyan-500/15",
+    border: "border-cyan-500/30"
+  }
+};
+var DEFAULT_ACTION_COLOR_CONFIG = {
+  text: "text-gray-400",
+  bg: "bg-gray-500/15",
+  border: "border-gray-500/30"
+};
+function getActionColorConfig(actionType) {
+  return ACTION_COLOR_CONFIG[actionType] ?? DEFAULT_ACTION_COLOR_CONFIG;
+}
+function computeActionDuration(action) {
+  switch (action.type) {
+    case "click":
+      return 800;
+    case "type":
+      return Math.max(800, (action.text?.length ?? 5) * 60 + 400);
+    case "navigate":
+      return 1200;
+    case "wait":
+      return Math.min(action.delay_ms ?? 1e3, 2e3);
+    case "select":
+      return 1e3;
+    default:
+      return 1500;
+  }
+}
+var STATE_COLORS = [
+  {
+    border: "#3b82f6",
+    bg: "rgba(59, 130, 246, 0.12)",
+    bgSolid: "rgba(59, 130, 246, 0.25)"
+  },
+  {
+    border: "#22c55e",
+    bg: "rgba(34, 197, 94, 0.12)",
+    bgSolid: "rgba(34, 197, 94, 0.25)"
+  },
+  {
+    border: "#f59e0b",
+    bg: "rgba(245, 158, 11, 0.12)",
+    bgSolid: "rgba(245, 158, 11, 0.25)"
+  },
+  {
+    border: "#ec4899",
+    bg: "rgba(236, 72, 153, 0.12)",
+    bgSolid: "rgba(236, 72, 153, 0.25)"
+  },
+  {
+    border: "#8b5cf6",
+    bg: "rgba(139, 92, 246, 0.12)",
+    bgSolid: "rgba(139, 92, 246, 0.25)"
+  },
+  {
+    border: "#ef4444",
+    bg: "rgba(239, 68, 68, 0.12)",
+    bgSolid: "rgba(239, 68, 68, 0.25)"
+  },
+  {
+    border: "#06b6d4",
+    bg: "rgba(6, 182, 212, 0.12)",
+    bgSolid: "rgba(6, 182, 212, 0.25)"
+  },
+  {
+    border: "#84cc16",
+    bg: "rgba(132, 204, 22, 0.12)",
+    bgSolid: "rgba(132, 204, 22, 0.25)"
+  }
+];
+function computeSpatialLayout(states, transitions, canvasWidth, canvasHeight) {
+  const positions = /* @__PURE__ */ new Map();
+  if (states.length === 0) return positions;
+  const overlapMatrix = /* @__PURE__ */ new Map();
+  for (const s1 of states) {
+    const map = /* @__PURE__ */ new Map();
+    for (const s2 of states) {
+      if (s1.state_id === s2.state_id) continue;
+      const s2Set = new Set(s2.element_ids);
+      const intersection = s1.element_ids.filter(
+        (eid) => s2Set.has(eid)
+      ).length;
+      const union = (/* @__PURE__ */ new Set([...s1.element_ids, ...s2.element_ids])).size;
+      map.set(s2.state_id, union > 0 ? intersection / union : 0);
+    }
+    overlapMatrix.set(s1.state_id, map);
+  }
+  const connectionStrength = /* @__PURE__ */ new Map();
+  for (const t of transitions) {
+    for (const from of t.from_states) {
+      for (const to of t.activate_states) {
+        if (!connectionStrength.has(from))
+          connectionStrength.set(from, /* @__PURE__ */ new Map());
+        const current = connectionStrength.get(from).get(to) ?? 0;
+        connectionStrength.get(from).set(to, current + 1);
+        if (!connectionStrength.has(to))
+          connectionStrength.set(to, /* @__PURE__ */ new Map());
+        connectionStrength.get(to).set(from, (connectionStrength.get(to).get(from) ?? 0) + 1);
+      }
+    }
+  }
+  const cx = canvasWidth / 2;
+  const cy = canvasHeight / 2;
+  const baseRadius = Math.min(canvasWidth, canvasHeight) * 0.35;
+  states.forEach((state, i) => {
+    const angle = i / states.length * Math.PI * 2 - Math.PI / 2;
+    const radius = Math.max(
+      20,
+      Math.min(50, 15 + state.element_ids.length * 2)
+    );
+    positions.set(state.state_id, {
+      x: cx + Math.cos(angle) * baseRadius,
+      y: cy + Math.sin(angle) * baseRadius,
+      radius
+    });
+  });
+  const iterations = 80;
+  const repulsionStrength = 3e3;
+  const attractionStrength = 0.02;
+  for (let iter = 0; iter < iterations; iter++) {
+    const forces = /* @__PURE__ */ new Map();
+    for (const s of states) {
+      forces.set(s.state_id, { fx: 0, fy: 0 });
+    }
+    for (let i = 0; i < states.length; i++) {
+      for (let j = i + 1; j < states.length; j++) {
+        const s1 = states[i];
+        const s2 = states[j];
+        const p1 = positions.get(s1.state_id);
+        const p2 = positions.get(s2.state_id);
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+        const force = repulsionStrength / (dist * dist);
+        const fx = dx / dist * force;
+        const fy = dy / dist * force;
+        forces.get(s1.state_id).fx -= fx;
+        forces.get(s1.state_id).fy -= fy;
+        forces.get(s2.state_id).fx += fx;
+        forces.get(s2.state_id).fy += fy;
+      }
+    }
+    for (let i = 0; i < states.length; i++) {
+      for (let j = i + 1; j < states.length; j++) {
+        const s1 = states[i];
+        const s2 = states[j];
+        const overlap = overlapMatrix.get(s1.state_id)?.get(s2.state_id) ?? 0;
+        const connection = (connectionStrength.get(s1.state_id)?.get(s2.state_id) ?? 0) * 0.3;
+        const attraction = (overlap + connection) * attractionStrength;
+        if (attraction > 0) {
+          const p1 = positions.get(s1.state_id);
+          const p2 = positions.get(s2.state_id);
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          forces.get(s1.state_id).fx += dx * attraction;
+          forces.get(s1.state_id).fy += dy * attraction;
+          forces.get(s2.state_id).fx -= dx * attraction;
+          forces.get(s2.state_id).fy -= dy * attraction;
+        }
+      }
+    }
+    for (const s of states) {
+      const p = positions.get(s.state_id);
+      const f = forces.get(s.state_id);
+      f.fx += (cx - p.x) * 5e-3;
+      f.fy += (cy - p.y) * 5e-3;
+    }
+    const cooling = 1 - iter / iterations;
+    const maxMove = 20 * cooling;
+    for (const s of states) {
+      const p = positions.get(s.state_id);
+      const f = forces.get(s.state_id);
+      const mag = Math.sqrt(f.fx * f.fx + f.fy * f.fy);
+      const scale = mag > maxMove ? maxMove / mag : 1;
+      p.x = Math.max(
+        p.radius + 10,
+        Math.min(canvasWidth - p.radius - 10, p.x + f.fx * scale)
+      );
+      p.y = Math.max(
+        p.radius + 30,
+        Math.min(canvasHeight - p.radius - 10, p.y + f.fy * scale)
+      );
+    }
+  }
+  return positions;
+}
+
+// src/state-machine/pathfinding.ts
+function buildAdjacencyList(transitions) {
+  const adj = /* @__PURE__ */ new Map();
+  for (const t of transitions) {
+    for (const fromState of t.from_states) {
+      const entries = adj.get(fromState) ?? [];
+      entries.push({
+        transition: t,
+        targetStates: t.activate_states
+      });
+      adj.set(fromState, entries);
+    }
+  }
+  return adj;
+}
+function findPathBFS(transitions, request) {
+  if (request.from_states.length === 0 || request.target_states.length === 0) {
+    return { found: false, steps: [], total_cost: 0, error: "Empty state set" };
+  }
+  const targetSet = new Set(request.target_states);
+  if (request.from_states.some((s) => targetSet.has(s))) {
+    return { found: true, steps: [], total_cost: 0 };
+  }
+  const adj = buildAdjacencyList(transitions);
+  const visited = /* @__PURE__ */ new Set();
+  const queue = [];
+  for (const startState of request.from_states) {
+    visited.add(startState);
+    queue.push({ stateId: startState, path: [] });
+  }
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const entries = adj.get(current.stateId) ?? [];
+    for (const entry of entries) {
+      const step = {
+        transition_id: entry.transition.transition_id,
+        transition_name: entry.transition.name,
+        from_states: entry.transition.from_states,
+        activate_states: entry.transition.activate_states,
+        exit_states: entry.transition.exit_states,
+        path_cost: entry.transition.path_cost
+      };
+      const newPath = [...current.path, step];
+      for (const target of entry.targetStates) {
+        if (targetSet.has(target)) {
+          const totalCost = newPath.reduce((sum, s) => sum + s.path_cost, 0);
+          return { found: true, steps: newPath, total_cost: totalCost };
+        }
+        if (!visited.has(target)) {
+          visited.add(target);
+          queue.push({ stateId: target, path: newPath });
+        }
+      }
+    }
+  }
+  return {
+    found: false,
+    steps: [],
+    total_cost: 0,
+    error: "No path found between the specified states"
+  };
+}
+function findPathDijkstra(transitions, request) {
+  if (request.from_states.length === 0 || request.target_states.length === 0) {
+    return { found: false, steps: [], total_cost: 0, error: "Empty state set" };
+  }
+  const targetSet = new Set(request.target_states);
+  if (request.from_states.some((s) => targetSet.has(s))) {
+    return { found: true, steps: [], total_cost: 0 };
+  }
+  const adj = buildAdjacencyList(transitions);
+  const bestCost = /* @__PURE__ */ new Map();
+  const pq = [];
+  for (const startState of request.from_states) {
+    bestCost.set(startState, 0);
+    pq.push({ stateId: startState, cost: 0, path: [] });
+  }
+  while (pq.length > 0) {
+    let minIdx = 0;
+    for (let i = 1; i < pq.length; i++) {
+      if (pq[i].cost < pq[minIdx].cost) minIdx = i;
+    }
+    const current = pq.splice(minIdx, 1)[0];
+    const known = bestCost.get(current.stateId);
+    if (known !== void 0 && current.cost > known) continue;
+    const entries = adj.get(current.stateId) ?? [];
+    for (const entry of entries) {
+      const step = {
+        transition_id: entry.transition.transition_id,
+        transition_name: entry.transition.name,
+        from_states: entry.transition.from_states,
+        activate_states: entry.transition.activate_states,
+        exit_states: entry.transition.exit_states,
+        path_cost: entry.transition.path_cost
+      };
+      const newCost = current.cost + entry.transition.path_cost;
+      const newPath = [...current.path, step];
+      for (const target of entry.targetStates) {
+        if (targetSet.has(target)) {
+          return { found: true, steps: newPath, total_cost: newCost };
+        }
+        const prevCost = bestCost.get(target);
+        if (prevCost === void 0 || newCost < prevCost) {
+          bestCost.set(target, newCost);
+          pq.push({ stateId: target, cost: newCost, path: newPath });
+        }
+      }
+    }
+  }
+  return {
+    found: false,
+    steps: [],
+    total_cost: 0,
+    error: "No path found between the specified states"
+  };
+}
+function findPath(transitions, request, algorithm = "dijkstra") {
+  if (algorithm === "bfs") {
+    return findPathBFS(transitions, request);
+  }
+  return findPathDijkstra(transitions, request);
+}
+
+// src/state-machine/validation.ts
+function deriveAction(elementId) {
+  if (elementId.startsWith("url:") || elementId.startsWith("nav:")) {
+    const label2 = elementId.includes(":") ? elementId.split(":").slice(1).join(":") : elementId;
+    return {
+      name: `Navigate to ${label2}`,
+      action: { type: "navigate", url: label2 }
+    };
+  }
+  if (elementId.startsWith("text:")) {
+    const label2 = elementId.includes(":") ? elementId.split(":").slice(1).join(":") : elementId;
+    return {
+      name: `Type in ${label2}`,
+      action: { type: "type", target: elementId, text: "" }
+    };
+  }
+  if (elementId.startsWith("role:")) {
+    const roleLabel = elementId.slice(5).toLowerCase();
+    if (/select|option|listbox|combobox|dropdown/i.test(roleLabel)) {
+      const label2 = elementId.split(":").slice(1).join(":");
+      return {
+        name: `Select ${label2}`,
+        action: { type: "select", target: elementId }
+      };
+    }
+  }
+  const label = elementId.includes(":") ? elementId.split(":").slice(1).join(":") : elementId;
+  return {
+    name: `Click ${label}`,
+    action: { type: "click", target: elementId }
+  };
+}
+function findExistingTransition(transitions, sourceStateId, targetStateId) {
+  return transitions.find(
+    (t) => t.from_states.includes(sourceStateId) && t.activate_states.includes(targetStateId)
+  );
+}
+function buildTransitionFromDrag(sourceStateId, targetStateId, elementId) {
+  const { name, action } = deriveAction(elementId);
+  const exitStates = sourceStateId !== targetStateId ? [sourceStateId] : [];
+  return {
+    name,
+    from_states: [sourceStateId],
+    activate_states: [targetStateId],
+    exit_states: exitStates,
+    actions: [action],
+    path_cost: 1,
+    stays_visible: false
+  };
+}
+function validateState(state) {
+  const errors = [];
+  if (!state.name?.trim()) {
+    errors.push({ field: "name", message: "State name is required" });
+  }
+  if (!state.element_ids || state.element_ids.length === 0) {
+    errors.push({
+      field: "element_ids",
+      message: "State must have at least one element"
+    });
+  }
+  return errors;
+}
+function validateTransition(transition) {
+  const errors = [];
+  if (!transition.name?.trim()) {
+    errors.push({ field: "name", message: "Transition name is required" });
+  }
+  if (!transition.from_states || transition.from_states.length === 0) {
+    errors.push({
+      field: "from_states",
+      message: "Transition must have at least one source state"
+    });
+  }
+  if (!transition.activate_states || transition.activate_states.length === 0) {
+    errors.push({
+      field: "activate_states",
+      message: "Transition must activate at least one state"
+    });
+  }
+  if (!transition.actions || transition.actions.length === 0) {
+    errors.push({
+      field: "actions",
+      message: "Transition must have at least one action"
+    });
+  }
+  return errors;
+}
+function isSelfLoop(fromStates, activateStates) {
+  return fromStates.some((s) => activateStates.includes(s));
+}
+function countElementsByType(states) {
+  const counts = {};
+  for (const state of states) {
+    for (const elementId of state.element_ids) {
+      const prefix = elementId.split(":")[0];
+      counts[prefix] = (counts[prefix] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+function findStatesWithElement(states, elementId) {
+  return states.filter((s) => s.element_ids.includes(elementId));
+}
+function getAllElementIds(states) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const state of states) {
+    for (const elementId of state.element_ids) {
+      ids.add(elementId);
+    }
+  }
+  return Array.from(ids);
+}
+
+// src/state-machine/export.ts
+function buildExportConfig(config, states, transitions) {
+  const statesRecord = {};
+  for (const state of states) {
+    statesRecord[state.state_id] = {
+      name: state.name,
+      description: state.description ?? "",
+      element_ids: state.element_ids,
+      render_ids: state.render_ids,
+      confidence: state.confidence,
+      acceptance_criteria: state.acceptance_criteria,
+      extra_metadata: state.extra_metadata
+    };
+  }
+  const transitionsRecord = {};
+  for (const transition of transitions) {
+    transitionsRecord[transition.transition_id] = {
+      name: transition.name,
+      from_states: transition.from_states,
+      activate_states: transition.activate_states,
+      exit_states: transition.exit_states,
+      actions: transition.actions,
+      path_cost: transition.path_cost,
+      stays_visible: transition.stays_visible,
+      extra_metadata: transition.extra_metadata
+    };
+  }
+  return {
+    states: statesRecord,
+    transitions: transitionsRecord,
+    config: {
+      name: config.name,
+      description: config.description ?? "",
+      render_count: config.render_count,
+      element_count: config.element_count,
+      include_html_ids: config.include_html_ids
+    }
+  };
+}
+function downloadAsJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 export {
+  ACTION_ACTIVE_LABELS,
+  ACTION_COLOR_CONFIG,
+  ACTION_LABELS,
+  ACTION_TYPE_COLORS,
   AI_SUMMARY_SETTING,
   APPROVAL_GATE_SETTING,
   BUILTIN_SKILLS,
   CONTEXT_MANAGEMENT_SETTING,
+  DEFAULT_ACTION_COLOR_CONFIG,
+  DEFAULT_ACTION_TYPE_COLOR,
+  DEFAULT_ELEMENT_TYPE_STYLE,
+  DEFAULT_LAYOUT_OPTIONS,
+  ELEMENT_TYPE_STYLES,
   GENERATE_CLAUDE_MODELS,
   GENERATE_GEMINI_MODELS,
   GENERATE_PROVIDER_OPTIONS,
@@ -2405,19 +3086,26 @@ export {
   RESOLVED_MODEL_PREVIEW_SETTING,
   SKILL_CATEGORY_ICON_DATA,
   SMART_ROUTING_SENTINEL,
+  STATE_COLORS,
+  STATE_MACHINE_LAYOUT_OPTIONS,
   STEP_ICON_DATA,
   STOP_ON_FAILURE_SETTING,
   TEST_ICON_DATA,
   TIMEOUT_SETTING,
   WORKFLOW_SETTINGS_CONFIG,
   autoNameFromMessage,
+  buildExportConfig,
+  buildTransitionFromDrag,
   bumpVersion,
   calculateCompressionSavings,
   canStepExistInPhase,
   clearUserSkills,
   compareVersions,
+  computeActionDuration,
   computeExportChecksum,
   computeSkillChecksum,
+  computeSpatialLayout,
+  countElementsByType,
   createDefaultCompressionStatus,
   createDefaultExecutionStatus,
   createDefaultHookStatus,
@@ -2427,6 +3115,7 @@ export {
   createDefaultSubStepStatus,
   createDefaultWorkflow,
   createSummaryStep,
+  deriveAction,
   describeConditions,
   describeCron,
   describeInterval,
@@ -2434,19 +3123,35 @@ export {
   describeTaskType,
   detectPreset,
   detectWorkflowFeatures,
+  downloadAsJson,
+  findExistingTransition,
+  findPath,
+  findPathBFS,
+  findPathDijkstra,
+  findStatesWithElement,
   formatDuration,
   formatRelativeTime,
   formatTokenCount,
   generateStepId,
   getAccentColors,
+  getActionColorConfig,
   getActionColors,
+  getActionTypeColor,
+  getAllElementIds,
   getAllSkills,
   getBooleanDisplayValue,
   getComplexityDisplayName,
   getConditionStatusText,
+  getConfidenceColor,
+  getElementLabel,
+  getElementTypePrefix,
+  getElementTypeStyle,
   getGenerateModels,
+  getGridLayoutedElements,
   getHookTriggerDisplayName,
+  getLayoutedElements,
   getLogSourceValue,
+  getNodeSizeTier,
   getPhaseCount,
   getSchedulerStatusColor,
   getSeverityColors,
@@ -2473,6 +3178,7 @@ export {
   instantiateComposition,
   instantiateSkill,
   isScheduledTaskRunning,
+  isSelfLoop,
   isTaskComplete,
   isTaskFailed,
   isTaskFinished,
@@ -2489,6 +3195,8 @@ export {
   searchSkills,
   toBooleanStoredValue,
   validateDependencies,
-  validateSkillParams
+  validateSkillParams,
+  validateState,
+  validateTransition
 };
 //# sourceMappingURL=index.js.map

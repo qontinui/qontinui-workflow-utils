@@ -71,18 +71,18 @@ export function isWorkflowEmpty(workflow: UnifiedWorkflow): boolean {
 
 export function getTotalStepCount(workflow: UnifiedWorkflow): number {
   const topLevelCount =
-    workflow.setup_steps.length +
-    workflow.verification_steps.length +
-    workflow.agentic_steps.length +
-    (workflow.completion_steps ?? []).length;
+    (workflow.setup_steps?.length ?? 0) +
+    (workflow.verification_steps?.length ?? 0) +
+    (workflow.agentic_steps?.length ?? 0) +
+    (workflow.completion_steps?.length ?? 0);
 
   const stagesCount = (workflow.stages ?? []).reduce(
     (sum, s) =>
       sum +
-      s.setup_steps.length +
-      s.verification_steps.length +
-      s.agentic_steps.length +
-      (s.completion_steps ?? []).length,
+      (s.setup_steps?.length ?? 0) +
+      (s.verification_steps?.length ?? 0) +
+      (s.agentic_steps?.length ?? 0) +
+      (s.completion_steps?.length ?? 0),
     0,
   );
 

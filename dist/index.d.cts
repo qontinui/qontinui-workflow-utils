@@ -3,7 +3,7 @@ import { AccentColorClasses, ActionColorClasses, SeverityColorClasses, StatusCol
 import { ScheduleConditions, ScheduleExpression, ScheduledTaskType, ConditionStatus, ScheduledTaskStatus, ScheduledTask } from '@qontinui/shared-types/scheduler';
 import { TaskRun } from '@qontinui/shared-types/task-run';
 import { CompressionStatus, ExecutionStatus, HookStatus, RetryStatus, RoutingStatus, SubStepStatusDisplay } from '@qontinui/shared-types/execution';
-import { ModelOverrides, ChatMessage } from '@qontinui/shared-types';
+import { ModelOverrides, AiMessage, StateMachineTransition, PathfindingRequest, PathfindingResult, StateMachineTransitionCreate, StateMachineState, TransitionAction, StateMachineConfig, StateMachineExportFormat } from '@qontinui/shared-types';
 
 declare function generateStepId(): string;
 declare function createSummaryStep(): PromptStep;
@@ -301,7 +301,7 @@ declare function getStepIconDataWithFallback(iconType: string | undefined, stepT
 declare function getTestIconData(testType: string): StepIconData;
 
 /**
- * Parse an output_log string into ChatMessage array.
+ * Parse an output_log string into AiMessage array.
  *
  * Supports two formats:
  * 1. **Tagged format** (post-persistence): [USER_MESSAGE] and [AI_RESPONSE] blocks
@@ -309,7 +309,7 @@ declare function getTestIconData(testType: string): StepIconData;
  *
  * Also handles [SESSION_START:N] markers (stripped).
  */
-declare function parseOutputLog(outputLog: string): ChatMessage[];
+declare function parseOutputLog(outputLog: string): AiMessage[];
 /**
  * Auto-generate a session name from the first user message.
  * Truncates to maxLength and adds ellipsis if needed.
@@ -474,4 +474,302 @@ declare function hasUpdate(localSkill: {
     checksum?: string;
 }): boolean;
 
-export { AI_SUMMARY_SETTING, APPROVAL_GATE_SETTING, BUILTIN_SKILLS, type BooleanSettingDef, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_OVERRIDE_PHASES, MODEL_PRESETS, MODEL_SETTING, type ModelOption, type ModelPreset, type NumberSettingDef, PER_PHASE_MODEL_SETTING, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type ProviderOption, REFLECTION_MODE_SETTING, RESOLVED_MODEL_PREVIEW_SETTING, type ResolvedModelInfo, SKILL_CATEGORY_ICON_DATA, SMART_ROUTING_SENTINEL, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, type VersionBumpType, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, bumpVersion, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, compareVersions, computeExportChecksum, computeSkillChecksum, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectPreset, detectWorkflowFeatures, formatDuration, formatRelativeTime, formatTokenCount, generateStepId, getAccentColors, getActionColors, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getGenerateModels, getHookTriggerDisplayName, getLogSourceValue, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillCategoryIconData, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, hasUpdate, instantiateComposition, instantiateSkill, isScheduledTaskRunning, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, parseVersion, registerUserSkills, resolveModelForPhase, searchSkills, toBooleanStoredValue, validateDependencies, validateSkillParams };
+/**
+ * Graph layout utilities for the state machine graph editor.
+ *
+ * Provides dagre-based hierarchical layout and grid fallback layout
+ * for ReactFlow state machine visualization.
+ */
+interface LayoutOptions {
+    direction?: "TB" | "LR" | "BT" | "RL";
+    nodeWidth?: number;
+    nodeHeight?: number;
+    nodeSep?: number;
+    rankSep?: number;
+}
+/**
+ * Default layout options for general graph layout.
+ */
+declare const DEFAULT_LAYOUT_OPTIONS: Required<LayoutOptions>;
+/**
+ * Layout options tuned for the state machine graph editor.
+ * Wider nodes and more spacing to accommodate element badges.
+ */
+declare const STATE_MACHINE_LAYOUT_OPTIONS: Required<LayoutOptions>;
+/**
+ * Dynamic node size tiers based on element count.
+ * Returns { width, gridCols } for the state node component.
+ */
+declare function getNodeSizeTier(elementCount: number): {
+    width: number;
+    gridCols: number;
+};
+interface ElementTypeStyle {
+    bg: string;
+    text: string;
+    border: string;
+}
+/**
+ * Color mapping for element ID prefixes.
+ * Used for type-colored badges on state nodes.
+ */
+declare const ELEMENT_TYPE_STYLES: Record<string, ElementTypeStyle>;
+declare const DEFAULT_ELEMENT_TYPE_STYLE: ElementTypeStyle;
+/**
+ * Get the style for an element based on its ID prefix.
+ */
+declare function getElementTypeStyle(elementId: string): ElementTypeStyle;
+/**
+ * Get the type prefix from an element ID.
+ */
+declare function getElementTypePrefix(elementId: string): string;
+/**
+ * Color mapping for transition action types (used on edge labels).
+ */
+declare const ACTION_TYPE_COLORS: Record<string, string>;
+declare const DEFAULT_ACTION_TYPE_COLOR = "text-gray-400";
+/**
+ * Get the color class for an action type.
+ */
+declare function getActionTypeColor(actionType: string): string;
+/**
+ * Get the color class for a confidence value.
+ */
+declare function getConfidenceColor(confidence: number): string;
+/**
+ * Minimal node/edge interface for layout computation.
+ * Compatible with ReactFlow's Node/Edge types without requiring the dependency.
+ */
+interface LayoutNode {
+    id: string;
+    position: {
+        x: number;
+        y: number;
+    };
+    [key: string]: unknown;
+}
+interface LayoutEdge {
+    id: string;
+    source: string;
+    target: string;
+    [key: string]: unknown;
+}
+/**
+ * Apply hierarchical layout using dagre.
+ *
+ * This function accepts a dagre instance as a parameter to avoid adding dagre
+ * as a direct dependency of this package. The consuming app provides its dagre instance.
+ *
+ * @param dagreLib - The dagre library instance
+ * @param nodes - Array of nodes to layout
+ * @param edges - Array of edges connecting nodes
+ * @param options - Layout configuration
+ * @returns Nodes with updated positions and unchanged edges
+ */
+declare function getLayoutedElements<N extends LayoutNode, E extends LayoutEdge>(dagreLib: {
+    graphlib: {
+        Graph: new () => DagreGraph;
+    };
+    layout: (graph: DagreGraph) => void;
+}, nodes: N[], edges: E[], options?: LayoutOptions): {
+    nodes: N[];
+    edges: E[];
+};
+/**
+ * Apply grid layout to nodes (fallback when dagre is unavailable).
+ */
+declare function getGridLayoutedElements<N extends LayoutNode, E extends LayoutEdge>(nodes: N[], edges: E[], columns?: number, nodeWidth?: number, nodeHeight?: number, spacingX?: number, spacingY?: number): {
+    nodes: N[];
+    edges: E[];
+};
+/** Minimal dagre graph interface for type safety */
+interface DagreGraph {
+    setDefaultEdgeLabel(fn: () => Record<string, unknown>): void;
+    setGraph(config: Record<string, unknown>): void;
+    setNode(id: string, config: Record<string, unknown>): void;
+    setEdge(source: string, target: string): void;
+    node(id: string): {
+        x: number;
+        y: number;
+    };
+}
+/**
+ * Get the display label from an element ID (part after the colon).
+ * For "testid:submit-button", returns "submit-button".
+ */
+declare function getElementLabel(elementId: string): string;
+/**
+ * Human-readable labels for transition action types.
+ */
+declare const ACTION_LABELS: Record<string, string>;
+/**
+ * Active/in-progress labels for transition action types.
+ */
+declare const ACTION_ACTIVE_LABELS: Record<string, string>;
+/**
+ * Full action color config (text, bg, border classes) for each action type.
+ */
+interface ActionColorConfig {
+    text: string;
+    bg: string;
+    border: string;
+}
+declare const ACTION_COLOR_CONFIG: Record<string, ActionColorConfig>;
+declare const DEFAULT_ACTION_COLOR_CONFIG: ActionColorConfig;
+/**
+ * Get the full color config for an action type.
+ */
+declare function getActionColorConfig(actionType: string): ActionColorConfig;
+/**
+ * Calculate the animation duration for an action (in ms).
+ */
+declare function computeActionDuration(action: {
+    type: string;
+    text?: string;
+    delay_ms?: number;
+}): number;
+interface StateColor {
+    border: string;
+    bg: string;
+    bgSolid: string;
+}
+/**
+ * Color palette for visually differentiating states in spatial views.
+ */
+declare const STATE_COLORS: readonly StateColor[];
+interface SpatialLayoutState {
+    state_id: string;
+    element_ids: string[];
+}
+interface SpatialLayoutTransition {
+    from_states: string[];
+    activate_states: string[];
+}
+/**
+ * Compute a force-directed spatial layout for states based on shared elements
+ * and transitions. Returns a map of state_id to position and radius.
+ *
+ * Uses Jaccard similarity on element_ids for attraction and transition
+ * connections for additional attraction. Includes center gravity and
+ * repulsion between all pairs.
+ */
+declare function computeSpatialLayout(states: SpatialLayoutState[], transitions: SpatialLayoutTransition[], canvasWidth: number, canvasHeight: number): Map<string, {
+    x: number;
+    y: number;
+    radius: number;
+}>;
+
+/**
+ * Client-side pathfinding for the state machine graph editor.
+ *
+ * These are TypeScript implementations of BFS and Dijkstra for previewing
+ * paths in the graph editor UI. They operate on the in-memory state machine
+ * data (states + transitions).
+ *
+ * Runtime navigation uses the qontinui Python library (multistate) which has
+ * more sophisticated pathfinding with action execution capabilities.
+ */
+
+/**
+ * Find a path using BFS (unweighted — ignores path costs).
+ * Returns the first path found (shortest by transition count).
+ */
+declare function findPathBFS(transitions: StateMachineTransition[], request: PathfindingRequest): PathfindingResult;
+/**
+ * Find a path using Dijkstra's algorithm (weighted — uses path costs).
+ * Returns the cheapest path by total path_cost.
+ */
+declare function findPathDijkstra(transitions: StateMachineTransition[], request: PathfindingRequest): PathfindingResult;
+type PathfindingAlgorithm = "bfs" | "dijkstra";
+/**
+ * Find a path between states using the specified algorithm.
+ *
+ * @param transitions - All transitions in the state machine
+ * @param request - Source and target states
+ * @param algorithm - "bfs" for shortest by hop count, "dijkstra" for cheapest by path cost
+ */
+declare function findPath(transitions: StateMachineTransition[], request: PathfindingRequest, algorithm?: PathfindingAlgorithm): PathfindingResult;
+
+/**
+ * State machine validation and derivation utilities.
+ *
+ * Pure functions for validating state machine data and deriving
+ * transition actions from element IDs.
+ */
+
+/**
+ * Derive a readable action name and TransitionAction from an element ID.
+ *
+ * Used when creating transitions via drag-and-drop: the element ID prefix
+ * determines the default action type.
+ *
+ * - `url:` or `nav:` → navigate action
+ * - `text:` → type action
+ * - `role:` with select/option/listbox/combobox/dropdown → select action
+ * - Everything else → click action
+ */
+declare function deriveAction(elementId: string): {
+    name: string;
+    action: TransitionAction;
+};
+/**
+ * Find a transition between two states (source → target direction).
+ */
+declare function findExistingTransition(transitions: StateMachineTransition[], sourceStateId: string, targetStateId: string): StateMachineTransition | undefined;
+/**
+ * Build a transition create payload from a drag-and-drop operation.
+ *
+ * @param sourceStateId - The state the element is dragged from
+ * @param targetStateId - The state the element is dropped onto
+ * @param elementId - The element being dragged (determines action type)
+ * @returns A StateMachineTransitionCreate ready to submit
+ */
+declare function buildTransitionFromDrag(sourceStateId: string, targetStateId: string, elementId: string): StateMachineTransitionCreate;
+interface ValidationError {
+    field: string;
+    message: string;
+}
+/**
+ * Validate a state for completeness.
+ */
+declare function validateState(state: Partial<StateMachineState>): ValidationError[];
+/**
+ * Validate a transition for completeness.
+ */
+declare function validateTransition(transition: Partial<StateMachineTransition>): ValidationError[];
+/**
+ * Check if a transition would create a self-loop (source = target).
+ */
+declare function isSelfLoop(fromStates: string[], activateStates: string[]): boolean;
+/**
+ * Count elements by type prefix across all states.
+ */
+declare function countElementsByType(states: StateMachineState[]): Record<string, number>;
+/**
+ * Find states that contain a given element.
+ */
+declare function findStatesWithElement(states: StateMachineState[], elementId: string): StateMachineState[];
+/**
+ * Get all unique element IDs across all states.
+ */
+declare function getAllElementIds(states: StateMachineState[]): string[];
+
+/**
+ * State machine export/import format utilities.
+ *
+ * Converts between the internal StateMachineConfig types and the export
+ * format compatible with UIBridgeRuntime.from_dict() in the qontinui library.
+ */
+
+/**
+ * Build the export format from config, states, and transitions.
+ * The resulting object is compatible with UIBridgeRuntime.from_dict().
+ */
+declare function buildExportConfig(config: StateMachineConfig, states: StateMachineState[], transitions: StateMachineTransition[]): StateMachineExportFormat;
+/**
+ * Trigger a JSON file download in the browser.
+ * This is a UI utility — call from components, not hooks.
+ */
+declare function downloadAsJson(data: unknown, filename: string): void;
+
+export { ACTION_ACTIVE_LABELS, ACTION_COLOR_CONFIG, ACTION_LABELS, ACTION_TYPE_COLORS, AI_SUMMARY_SETTING, APPROVAL_GATE_SETTING, type ActionColorConfig, BUILTIN_SKILLS, type BooleanSettingDef, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, DEFAULT_ACTION_COLOR_CONFIG, DEFAULT_ACTION_TYPE_COLOR, DEFAULT_ELEMENT_TYPE_STYLE, DEFAULT_LAYOUT_OPTIONS, ELEMENT_TYPE_STYLES, type ElementTypeStyle, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LayoutEdge, type LayoutNode, type LayoutOptions, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_OVERRIDE_PHASES, MODEL_PRESETS, MODEL_SETTING, type ModelOption, type ModelPreset, type NumberSettingDef, PER_PHASE_MODEL_SETTING, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type PathfindingAlgorithm, type ProviderOption, REFLECTION_MODE_SETTING, RESOLVED_MODEL_PREVIEW_SETTING, type ResolvedModelInfo, SKILL_CATEGORY_ICON_DATA, SMART_ROUTING_SENTINEL, STATE_COLORS, STATE_MACHINE_LAYOUT_OPTIONS, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StateColor, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, type ValidationError, type VersionBumpType, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, buildExportConfig, buildTransitionFromDrag, bumpVersion, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, compareVersions, computeActionDuration, computeExportChecksum, computeSkillChecksum, computeSpatialLayout, countElementsByType, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, deriveAction, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectPreset, detectWorkflowFeatures, downloadAsJson, findExistingTransition, findPath, findPathBFS, findPathDijkstra, findStatesWithElement, formatDuration, formatRelativeTime, formatTokenCount, generateStepId, getAccentColors, getActionColorConfig, getActionColors, getActionTypeColor, getAllElementIds, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getConfidenceColor, getElementLabel, getElementTypePrefix, getElementTypeStyle, getGenerateModels, getGridLayoutedElements, getHookTriggerDisplayName, getLayoutedElements, getLogSourceValue, getNodeSizeTier, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillCategoryIconData, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, hasUpdate, instantiateComposition, instantiateSkill, isScheduledTaskRunning, isSelfLoop, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, parseVersion, registerUserSkills, resolveModelForPhase, searchSkills, toBooleanStoredValue, validateDependencies, validateSkillParams, validateState, validateTransition };

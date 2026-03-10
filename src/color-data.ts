@@ -221,6 +221,12 @@ const ACCENT_COLORS: Record<AccentColor, AccentColorClasses> = {
     text: "text-purple-400",
     border: "border-purple-500/30",
   },
+  rose: {
+    bg: "bg-rose-500/10",
+    bgSolid: "bg-rose-500",
+    text: "text-rose-400",
+    border: "border-rose-500/30",
+  },
   slate: {
     bg: "bg-slate-500/10",
     bgSolid: "bg-slate-500",

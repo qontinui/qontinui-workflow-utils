@@ -485,6 +485,31 @@ export const GENERATE_SETTINGS_CONFIG: readonly SettingDef[] = [
       "spatial composition, anti-AI-slop rules) in generated workflows. " +
       "Enable for design-focused frontend tasks.",
   },
+  {
+    key: "generateSpecification",
+    type: "boolean",
+    label: "Generate specification",
+    defaultValue: true,
+    tooltip:
+      "Run a specification agent before generating the workflow. " +
+      "Defines acceptance criteria that guide verification step generation. " +
+      "Produces more thorough verification at the cost of ~10-15s additional generation time.",
+  },
+  {
+    key: "verificationDepth",
+    type: "select",
+    label: "Verification depth",
+    defaultValue: "standard",
+    options: [
+      { value: "smoke", label: "Smoke — minimal build/render checks" },
+      { value: "standard", label: "Standard — spec-driven verification" },
+      { value: "thorough", label: "Thorough — standard + anomaly detection" },
+      { value: "regression", label: "Regression — standard + all known issues" },
+    ],
+    description:
+      "Controls how many verification steps are generated. " +
+      "Higher levels include checks for known issues and exploratory anomaly detection.",
+  },
 ] as const;
 
 // =============================================================================

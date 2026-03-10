@@ -1,7 +1,7 @@
-import type { ChatMessage } from "@qontinui/shared-types";
+import type { AiMessage } from "@qontinui/shared-types";
 
 /**
- * Parse an output_log string into ChatMessage array.
+ * Parse an output_log string into AiMessage array.
  *
  * Supports two formats:
  * 1. **Tagged format** (post-persistence): [USER_MESSAGE] and [AI_RESPONSE] blocks
@@ -9,7 +9,7 @@ import type { ChatMessage } from "@qontinui/shared-types";
  *
  * Also handles [SESSION_START:N] markers (stripped).
  */
-export function parseOutputLog(outputLog: string): ChatMessage[] {
+export function parseOutputLog(outputLog: string): AiMessage[] {
   // Detect if output_log uses [AI_RESPONSE] blocks (new persisted format)
   const hasAiResponseBlocks = outputLog.includes("[AI_RESPONSE]");
 
@@ -27,8 +27,8 @@ export function parseOutputLog(outputLog: string): ChatMessage[] {
  * between user messages) and later ones are tagged with [AI_RESPONSE]. This happens
  * when a session started before the persistence feature and was resumed after.
  */
-function parseTaggedFormat(outputLog: string): ChatMessage[] {
-  const messages: ChatMessage[] = [];
+function parseTaggedFormat(outputLog: string): AiMessage[] {
+  const messages: AiMessage[] = [];
 
   // Match all recognized blocks in order: USER_MESSAGE, AI_RESPONSE, CHAT_RESUMED, SYSTEM_NOTE
   const blockRegex =
@@ -78,8 +78,8 @@ function parseTaggedFormat(outputLog: string): ChatMessage[] {
 /**
  * Parse output_log using the legacy format (USER_MESSAGE blocks + plain AI text).
  */
-function parseLegacyFormat(outputLog: string): ChatMessage[] {
-  const messages: ChatMessage[] = [];
+function parseLegacyFormat(outputLog: string): AiMessage[] {
+  const messages: AiMessage[] = [];
   const userMsgRegex = /\[USER_MESSAGE\]\n?([\s\S]*?)\n?\[\/USER_MESSAGE\]/g;
 
   let lastIndex = 0;
