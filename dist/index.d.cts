@@ -4,6 +4,7 @@ import { ScheduleConditions, ScheduleExpression, ScheduledTaskType, ConditionSta
 import { TaskRun } from '@qontinui/shared-types/task-run';
 import { CompressionStatus, ExecutionStatus, HookStatus, RetryStatus, RoutingStatus, SubStepStatusDisplay } from '@qontinui/shared-types/execution';
 import { ModelOverrides, AiMessage, StateMachineTransition, PathfindingRequest, PathfindingResult, StateMachineTransitionCreate, StateMachineState, TransitionAction, StateMachineConfig, StateMachineExportFormat } from '@qontinui/shared-types';
+import { ConstraintCheckType, ConstraintSeverity, Constraint, ResourceLimits } from '@qontinui/shared-types/constraints';
 
 declare function generateStepId(): string;
 declare function createSummaryStep(): PromptStep;
@@ -167,6 +168,8 @@ declare const CONTEXT_MANAGEMENT_SETTING: CustomSettingDef;
 declare const PER_PHASE_MODEL_SETTING: CustomSettingDef;
 /** Custom setting definition for the resolved model preview table. */
 declare const RESOLVED_MODEL_PREVIEW_SETTING: CustomSettingDef;
+/** Custom setting definition for per-workflow constraint overrides. */
+declare const CONSTRAINT_OVERRIDES_SETTING: CustomSettingDef;
 /** Phase metadata for the per-phase model select UI */
 declare const MODEL_OVERRIDE_PHASES: readonly [{
     readonly key: "setup";
@@ -766,10 +769,67 @@ declare function getAllElementIds(states: StateMachineState[]): string[];
  * The resulting object is compatible with UIBridgeRuntime.from_dict().
  */
 declare function buildExportConfig(config: StateMachineConfig, states: StateMachineState[], transitions: StateMachineTransition[]): StateMachineExportFormat;
-/**
- * Trigger a JSON file download in the browser.
- * This is a UI utility — call from components, not hooks.
- */
-declare function downloadAsJson(data: unknown, filename: string): void;
 
-export { ACTION_ACTIVE_LABELS, ACTION_COLOR_CONFIG, ACTION_LABELS, ACTION_TYPE_COLORS, AI_SUMMARY_SETTING, APPROVAL_GATE_SETTING, type ActionColorConfig, BUILTIN_SKILLS, type BooleanSettingDef, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, DEFAULT_ACTION_COLOR_CONFIG, DEFAULT_ACTION_TYPE_COLOR, DEFAULT_ELEMENT_TYPE_STYLE, DEFAULT_LAYOUT_OPTIONS, ELEMENT_TYPE_STYLES, type ElementTypeStyle, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LayoutEdge, type LayoutNode, type LayoutOptions, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_OVERRIDE_PHASES, MODEL_PRESETS, MODEL_SETTING, type ModelOption, type ModelPreset, type NumberSettingDef, PER_PHASE_MODEL_SETTING, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type PathfindingAlgorithm, type ProviderOption, REFLECTION_MODE_SETTING, RESOLVED_MODEL_PREVIEW_SETTING, type ResolvedModelInfo, SKILL_CATEGORY_ICON_DATA, SMART_ROUTING_SENTINEL, STATE_COLORS, STATE_MACHINE_LAYOUT_OPTIONS, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StateColor, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, type ValidationError, type VersionBumpType, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, buildExportConfig, buildTransitionFromDrag, bumpVersion, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, compareVersions, computeActionDuration, computeExportChecksum, computeSkillChecksum, computeSpatialLayout, countElementsByType, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, deriveAction, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectPreset, detectWorkflowFeatures, downloadAsJson, findExistingTransition, findPath, findPathBFS, findPathDijkstra, findStatesWithElement, formatDuration, formatRelativeTime, formatTokenCount, generateStepId, getAccentColors, getActionColorConfig, getActionColors, getActionTypeColor, getAllElementIds, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getConfidenceColor, getElementLabel, getElementTypePrefix, getElementTypeStyle, getGenerateModels, getGridLayoutedElements, getHookTriggerDisplayName, getLayoutedElements, getLogSourceValue, getNodeSizeTier, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillCategoryIconData, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, hasUpdate, instantiateComposition, instantiateSkill, isScheduledTaskRunning, isSelfLoop, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, parseVersion, registerUserSkills, resolveModelForPhase, searchSkills, toBooleanStoredValue, validateDependencies, validateSkillParams, validateState, validateTransition };
+/**
+ * Constraint Engine Utilities
+ *
+ * Pure helper functions for working with constraint types.
+ * Used by both the web and runner frontends.
+ */
+
+/** All built-in constraint IDs shipped with the runner. */
+declare const BUILTIN_CONSTRAINT_IDS: readonly ["builtin:no-secrets", "builtin:no-debug-statements", "builtin:no-env-files"];
+type BuiltinConstraintId = (typeof BUILTIN_CONSTRAINT_IDS)[number];
+/** Returns true if the constraint was shipped as a built-in. */
+declare function isBuiltinConstraint(id: string): boolean;
+/** Returns true if the constraint was defined in `constraints.toml` by the user. */
+declare function isCustomConstraint(id: string): boolean;
+/** Returns true if the constraint was proposed by the AI during an agentic phase. */
+declare function isAiConstraint(id: string): boolean;
+/** Human-readable label for a constraint check type. */
+declare function constraintCheckTypeLabel(type: ConstraintCheckType): string;
+/** Human-readable label for a severity level. */
+declare function severityLabel(severity: ConstraintSeverity): string;
+/** Tailwind color class for a severity level (text color). */
+declare function severityColor(severity: ConstraintSeverity): string;
+/** Tailwind background color class for a severity badge. */
+declare function severityBadgeColor(severity: ConstraintSeverity): string;
+/**
+ * Generate a `project:` constraint ID from a human-readable name.
+ *
+ * Converts to lowercase, replaces whitespace with hyphens, and strips
+ * characters that aren't alphanumeric or hyphens.
+ */
+declare function generateConstraintId(name: string): string;
+/** Default timeout in seconds for command checks (matches Rust default). */
+declare const DEFAULT_COMMAND_TIMEOUT_SECS = 30;
+/** Default warning threshold fraction (matches Rust default). */
+declare const DEFAULT_WARNING_THRESHOLD = 0.75;
+
+/**
+ * Constraint TOML Generation
+ *
+ * Pure functions for serializing in-memory constraint state to TOML format
+ * compatible with the Rust `parse_config_str` parser.
+ *
+ * Used by both the runner and web frontend useConstraints hooks.
+ */
+
+/** Escape a TOML string value (wrap in quotes, escape backslashes and quotes). */
+declare function tomlString(value: string): string;
+/** Format a TOML array of strings on a single line. */
+declare function tomlStringArray(values: string[]): string;
+/**
+ * Generate a clean, readable TOML config string from the in-memory constraint model.
+ *
+ * The output matches the format expected by the Rust `parse_config_str` function:
+ * - `[builtins]` section with `no-secrets = true/false`, etc.
+ * - `[resources]` section (only if any limit is set)
+ * - `[[constraint]]` array entries with check-type-specific fields
+ *
+ * AI constraints (id starting with "ai:") are excluded from the output.
+ * Only builtin and project constraints are serialized.
+ */
+declare function generateConstraintToml(constraints: Constraint[], resourceLimits: ResourceLimits): string;
+
+export { ACTION_ACTIVE_LABELS, ACTION_COLOR_CONFIG, ACTION_LABELS, ACTION_TYPE_COLORS, AI_SUMMARY_SETTING, APPROVAL_GATE_SETTING, type ActionColorConfig, BUILTIN_CONSTRAINT_IDS, BUILTIN_SKILLS, type BooleanSettingDef, type BuiltinConstraintId, CONSTRAINT_OVERRIDES_SETTING, CONTEXT_MANAGEMENT_SETTING, type CustomSettingDef, DEFAULT_ACTION_COLOR_CONFIG, DEFAULT_ACTION_TYPE_COLOR, DEFAULT_COMMAND_TIMEOUT_SECS, DEFAULT_ELEMENT_TYPE_STYLE, DEFAULT_LAYOUT_OPTIONS, DEFAULT_WARNING_THRESHOLD, ELEMENT_TYPE_STYLES, type ElementTypeStyle, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LayoutEdge, type LayoutNode, type LayoutOptions, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_OVERRIDE_PHASES, MODEL_PRESETS, MODEL_SETTING, type ModelOption, type ModelPreset, type NumberSettingDef, PER_PHASE_MODEL_SETTING, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type PathfindingAlgorithm, type ProviderOption, REFLECTION_MODE_SETTING, RESOLVED_MODEL_PREVIEW_SETTING, type ResolvedModelInfo, SKILL_CATEGORY_ICON_DATA, SMART_ROUTING_SENTINEL, STATE_COLORS, STATE_MACHINE_LAYOUT_OPTIONS, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StateColor, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, type ValidationError, type VersionBumpType, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, buildExportConfig, buildTransitionFromDrag, bumpVersion, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, compareVersions, computeActionDuration, computeExportChecksum, computeSkillChecksum, computeSpatialLayout, constraintCheckTypeLabel, countElementsByType, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, deriveAction, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectPreset, detectWorkflowFeatures, findExistingTransition, findPath, findPathBFS, findPathDijkstra, findStatesWithElement, formatDuration, formatRelativeTime, formatTokenCount, generateConstraintId, generateConstraintToml, generateStepId, getAccentColors, getActionColorConfig, getActionColors, getActionTypeColor, getAllElementIds, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getConfidenceColor, getElementLabel, getElementTypePrefix, getElementTypeStyle, getGenerateModels, getGridLayoutedElements, getHookTriggerDisplayName, getLayoutedElements, getLogSourceValue, getNodeSizeTier, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillCategoryIconData, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, hasUpdate, instantiateComposition, instantiateSkill, isAiConstraint, isBuiltinConstraint, isCustomConstraint, isScheduledTaskRunning, isSelfLoop, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, parseVersion, registerUserSkills, resolveModelForPhase, searchSkills, severityBadgeColor, severityColor, severityLabel, toBooleanStoredValue, tomlString, tomlStringArray, validateDependencies, validateSkillParams, validateState, validateTransition };

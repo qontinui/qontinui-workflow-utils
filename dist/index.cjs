@@ -26,12 +26,16 @@ __export(index_exports, {
   ACTION_TYPE_COLORS: () => ACTION_TYPE_COLORS,
   AI_SUMMARY_SETTING: () => AI_SUMMARY_SETTING,
   APPROVAL_GATE_SETTING: () => APPROVAL_GATE_SETTING,
+  BUILTIN_CONSTRAINT_IDS: () => BUILTIN_CONSTRAINT_IDS,
   BUILTIN_SKILLS: () => BUILTIN_SKILLS,
+  CONSTRAINT_OVERRIDES_SETTING: () => CONSTRAINT_OVERRIDES_SETTING,
   CONTEXT_MANAGEMENT_SETTING: () => CONTEXT_MANAGEMENT_SETTING,
   DEFAULT_ACTION_COLOR_CONFIG: () => DEFAULT_ACTION_COLOR_CONFIG,
   DEFAULT_ACTION_TYPE_COLOR: () => DEFAULT_ACTION_TYPE_COLOR,
+  DEFAULT_COMMAND_TIMEOUT_SECS: () => DEFAULT_COMMAND_TIMEOUT_SECS,
   DEFAULT_ELEMENT_TYPE_STYLE: () => DEFAULT_ELEMENT_TYPE_STYLE,
   DEFAULT_LAYOUT_OPTIONS: () => DEFAULT_LAYOUT_OPTIONS,
+  DEFAULT_WARNING_THRESHOLD: () => DEFAULT_WARNING_THRESHOLD,
   ELEMENT_TYPE_STYLES: () => ELEMENT_TYPE_STYLES,
   GENERATE_CLAUDE_MODELS: () => GENERATE_CLAUDE_MODELS,
   GENERATE_GEMINI_MODELS: () => GENERATE_GEMINI_MODELS,
@@ -73,6 +77,7 @@ __export(index_exports, {
   computeExportChecksum: () => computeExportChecksum,
   computeSkillChecksum: () => computeSkillChecksum,
   computeSpatialLayout: () => computeSpatialLayout,
+  constraintCheckTypeLabel: () => constraintCheckTypeLabel,
   countElementsByType: () => countElementsByType,
   createDefaultCompressionStatus: () => createDefaultCompressionStatus,
   createDefaultExecutionStatus: () => createDefaultExecutionStatus,
@@ -91,7 +96,6 @@ __export(index_exports, {
   describeTaskType: () => describeTaskType,
   detectPreset: () => detectPreset,
   detectWorkflowFeatures: () => detectWorkflowFeatures,
-  downloadAsJson: () => downloadAsJson,
   findExistingTransition: () => findExistingTransition,
   findPath: () => findPath,
   findPathBFS: () => findPathBFS,
@@ -100,6 +104,8 @@ __export(index_exports, {
   formatDuration: () => formatDuration,
   formatRelativeTime: () => formatRelativeTime,
   formatTokenCount: () => formatTokenCount,
+  generateConstraintId: () => generateConstraintId,
+  generateConstraintToml: () => generateConstraintToml,
   generateStepId: () => generateStepId,
   getAccentColors: () => getAccentColors,
   getActionColorConfig: () => getActionColorConfig,
@@ -145,6 +151,9 @@ __export(index_exports, {
   hasUpdate: () => hasUpdate,
   instantiateComposition: () => instantiateComposition,
   instantiateSkill: () => instantiateSkill,
+  isAiConstraint: () => isAiConstraint,
+  isBuiltinConstraint: () => isBuiltinConstraint,
+  isCustomConstraint: () => isCustomConstraint,
   isScheduledTaskRunning: () => isScheduledTaskRunning,
   isSelfLoop: () => isSelfLoop,
   isTaskComplete: () => isTaskComplete,
@@ -161,7 +170,12 @@ __export(index_exports, {
   registerUserSkills: () => registerUserSkills,
   resolveModelForPhase: () => resolveModelForPhase,
   searchSkills: () => searchSkills,
+  severityBadgeColor: () => severityBadgeColor,
+  severityColor: () => severityColor,
+  severityLabel: () => severityLabel,
   toBooleanStoredValue: () => toBooleanStoredValue,
+  tomlString: () => tomlString,
+  tomlStringArray: () => tomlStringArray,
   validateDependencies: () => validateDependencies,
   validateSkillParams: () => validateSkillParams,
   validateState: () => validateState,
@@ -1015,6 +1029,12 @@ var RESOLVED_MODEL_PREVIEW_SETTING = {
   customType: "resolved_model_preview",
   visible: (f) => f.hasAiPrompts
 };
+var CONSTRAINT_OVERRIDES_SETTING = {
+  key: "constraint_overrides",
+  type: "custom",
+  label: "Constraint Overrides",
+  customType: "constraint_overrides"
+};
 var MODEL_OVERRIDE_PHASES = [
   { key: "setup", label: "Setup Phase" },
   { key: "agentic", label: "Agentic Phase" },
@@ -1071,6 +1091,7 @@ var WORKFLOW_SETTINGS_CONFIG = [
     settings: [
       PROMPT_TEMPLATE_SETTING,
       CONTEXT_MANAGEMENT_SETTING,
+      CONSTRAINT_OVERRIDES_SETTING,
       STOP_ON_FAILURE_SETTING,
       APPROVAL_GATE_SETTING
     ]
@@ -3018,6 +3039,9 @@ function findPathDijkstra(transitions, request) {
     const current = pq.splice(minIdx, 1)[0];
     const known = bestCost.get(current.stateId);
     if (known !== void 0 && current.cost > known) continue;
+    if (targetSet.has(current.stateId)) {
+      return { found: true, steps: current.path, total_cost: current.cost };
+    }
     const entries = adj.get(current.stateId) ?? [];
     for (const entry of entries) {
       const step = {
@@ -3031,9 +3055,6 @@ function findPathDijkstra(transitions, request) {
       const newCost = current.cost + entry.transition.path_cost;
       const newPath = [...current.path, step];
       for (const target of entry.targetStates) {
-        if (targetSet.has(target)) {
-          return { found: true, steps: newPath, total_cost: newCost };
-        }
         const prevCost = bestCost.get(target);
         if (prevCost === void 0 || newCost < prevCost) {
           bestCost.set(target, newCost);
@@ -3209,18 +3230,165 @@ function buildExportConfig(config, states, transitions) {
     }
   };
 }
-function downloadAsJson(data, filename) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json"
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+
+// src/constraint-utils.ts
+var BUILTIN_CONSTRAINT_IDS = [
+  "builtin:no-secrets",
+  "builtin:no-debug-statements",
+  "builtin:no-env-files"
+];
+function isBuiltinConstraint(id) {
+  return id.startsWith("builtin:");
+}
+function isCustomConstraint(id) {
+  return id.startsWith("project:");
+}
+function isAiConstraint(id) {
+  return id.startsWith("ai:");
+}
+function constraintCheckTypeLabel(type) {
+  switch (type) {
+    case "grep_forbidden":
+      return "Grep Forbidden";
+    case "grep_required":
+      return "Grep Required";
+    case "file_scope":
+      return "File Scope";
+    case "command":
+      return "Command";
+    default:
+      return type;
+  }
+}
+function severityLabel(severity) {
+  switch (severity) {
+    case "block":
+      return "Block";
+    case "warn":
+      return "Warn";
+    case "log":
+      return "Log";
+    default:
+      return severity;
+  }
+}
+function severityColor(severity) {
+  switch (severity) {
+    case "block":
+      return "text-red-500";
+    case "warn":
+      return "text-yellow-500";
+    case "log":
+      return "text-gray-400";
+    default:
+      return "text-gray-400";
+  }
+}
+function severityBadgeColor(severity) {
+  switch (severity) {
+    case "block":
+      return "bg-red-500/10 text-red-500";
+    case "warn":
+      return "bg-yellow-500/10 text-yellow-500";
+    case "log":
+      return "bg-gray-500/10 text-gray-400";
+    default:
+      return "bg-gray-500/10 text-gray-400";
+  }
+}
+function generateConstraintId(name) {
+  const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  return `project:${slug}`;
+}
+var DEFAULT_COMMAND_TIMEOUT_SECS = 30;
+var DEFAULT_WARNING_THRESHOLD = 0.75;
+
+// src/constraint-toml.ts
+function tomlString(value) {
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+function tomlStringArray(values) {
+  return `[${values.map(tomlString).join(", ")}]`;
+}
+function generateConstraintToml(constraints, resourceLimits) {
+  const lines = [];
+  const builtins = constraints.filter((c) => isBuiltinConstraint(c.id));
+  if (builtins.length > 0) {
+    lines.push("[builtins]");
+    for (const b of builtins) {
+      const suffix = b.id.replace(/^builtin:/, "");
+      lines.push(`${suffix} = ${b.enabled}`);
+    }
+    lines.push("");
+  }
+  const hasResources = resourceLimits.max_wall_time_secs != null || resourceLimits.max_files_modified != null || resourceLimits.max_agentic_time_ms != null || resourceLimits.warning_threshold != null;
+  if (hasResources) {
+    lines.push("[resources]");
+    if (resourceLimits.max_wall_time_secs != null) {
+      lines.push(`max_wall_time_secs = ${resourceLimits.max_wall_time_secs}`);
+    }
+    if (resourceLimits.max_files_modified != null) {
+      lines.push(`max_files_modified = ${resourceLimits.max_files_modified}`);
+    }
+    if (resourceLimits.max_agentic_time_ms != null) {
+      lines.push(`max_agentic_time_ms = ${resourceLimits.max_agentic_time_ms}`);
+    }
+    if (resourceLimits.warning_threshold != null) {
+      lines.push(`warning_threshold = ${resourceLimits.warning_threshold}`);
+    }
+    lines.push("");
+  }
+  const custom = constraints.filter((c) => isCustomConstraint(c.id));
+  for (const c of custom) {
+    lines.push("[[constraint]]");
+    lines.push(`id = ${tomlString(c.id)}`);
+    lines.push(`name = ${tomlString(c.name)}`);
+    if (c.description) {
+      lines.push(`description = ${tomlString(c.description)}`);
+    }
+    lines.push(`severity = ${tomlString(c.severity)}`);
+    if (!c.enabled) {
+      lines.push("enabled = false");
+    }
+    lines.push("");
+    lines.push("[constraint.check]");
+    appendCheckToml(lines, c.check);
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd() + "\n";
+}
+function appendCheckToml(lines, check) {
+  switch (check.type) {
+    case "grep_forbidden":
+      lines.push(`type = "grep_forbidden"`);
+      lines.push(`pattern = ${tomlString(check.pattern)}`);
+      if (check.file_glob) {
+        lines.push(`file_glob = ${tomlString(check.file_glob)}`);
+      }
+      break;
+    case "grep_required":
+      lines.push(`type = "grep_required"`);
+      lines.push(`pattern = ${tomlString(check.pattern)}`);
+      if (check.file_glob) {
+        lines.push(`file_glob = ${tomlString(check.file_glob)}`);
+      }
+      break;
+    case "file_scope":
+      lines.push(`type = "file_scope"`);
+      lines.push(`allowed_paths = ${tomlStringArray(check.allowed_paths)}`);
+      break;
+    case "command":
+      lines.push(`type = "command"`);
+      lines.push(`cmd = ${tomlString(check.cmd)}`);
+      if (check.cwd) {
+        lines.push(`cwd = ${tomlString(check.cwd)}`);
+      }
+      if (check.timeout_secs !== DEFAULT_COMMAND_TIMEOUT_SECS) {
+        lines.push(`timeout_secs = ${check.timeout_secs}`);
+      }
+      break;
+  }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -3230,12 +3398,16 @@ function downloadAsJson(data, filename) {
   ACTION_TYPE_COLORS,
   AI_SUMMARY_SETTING,
   APPROVAL_GATE_SETTING,
+  BUILTIN_CONSTRAINT_IDS,
   BUILTIN_SKILLS,
+  CONSTRAINT_OVERRIDES_SETTING,
   CONTEXT_MANAGEMENT_SETTING,
   DEFAULT_ACTION_COLOR_CONFIG,
   DEFAULT_ACTION_TYPE_COLOR,
+  DEFAULT_COMMAND_TIMEOUT_SECS,
   DEFAULT_ELEMENT_TYPE_STYLE,
   DEFAULT_LAYOUT_OPTIONS,
+  DEFAULT_WARNING_THRESHOLD,
   ELEMENT_TYPE_STYLES,
   GENERATE_CLAUDE_MODELS,
   GENERATE_GEMINI_MODELS,
@@ -3277,6 +3449,7 @@ function downloadAsJson(data, filename) {
   computeExportChecksum,
   computeSkillChecksum,
   computeSpatialLayout,
+  constraintCheckTypeLabel,
   countElementsByType,
   createDefaultCompressionStatus,
   createDefaultExecutionStatus,
@@ -3295,7 +3468,6 @@ function downloadAsJson(data, filename) {
   describeTaskType,
   detectPreset,
   detectWorkflowFeatures,
-  downloadAsJson,
   findExistingTransition,
   findPath,
   findPathBFS,
@@ -3304,6 +3476,8 @@ function downloadAsJson(data, filename) {
   formatDuration,
   formatRelativeTime,
   formatTokenCount,
+  generateConstraintId,
+  generateConstraintToml,
   generateStepId,
   getAccentColors,
   getActionColorConfig,
@@ -3349,6 +3523,9 @@ function downloadAsJson(data, filename) {
   hasUpdate,
   instantiateComposition,
   instantiateSkill,
+  isAiConstraint,
+  isBuiltinConstraint,
+  isCustomConstraint,
   isScheduledTaskRunning,
   isSelfLoop,
   isTaskComplete,
@@ -3365,7 +3542,12 @@ function downloadAsJson(data, filename) {
   registerUserSkills,
   resolveModelForPhase,
   searchSkills,
+  severityBadgeColor,
+  severityColor,
+  severityLabel,
   toBooleanStoredValue,
+  tomlString,
+  tomlStringArray,
   validateDependencies,
   validateSkillParams,
   validateState,

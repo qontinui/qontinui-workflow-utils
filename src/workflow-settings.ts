@@ -347,6 +347,14 @@ export const RESOLVED_MODEL_PREVIEW_SETTING: CustomSettingDef = {
   visible: (f) => f.hasAiPrompts,
 };
 
+/** Custom setting definition for per-workflow constraint overrides. */
+export const CONSTRAINT_OVERRIDES_SETTING: CustomSettingDef = {
+  key: "constraint_overrides",
+  type: "custom",
+  label: "Constraint Overrides",
+  customType: "constraint_overrides",
+};
+
 /** Phase metadata for the per-phase model select UI */
 export const MODEL_OVERRIDE_PHASES = [
   { key: "setup", label: "Setup Phase" },
@@ -414,6 +422,7 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
     settings: [
       PROMPT_TEMPLATE_SETTING,
       CONTEXT_MANAGEMENT_SETTING,
+      CONSTRAINT_OVERRIDES_SETTING,
       STOP_ON_FAILURE_SETTING,
       APPROVAL_GATE_SETTING,
     ],

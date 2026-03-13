@@ -21,15 +21,18 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@qontinui/shared-types": "file:../qontinui-schemas/ts"
   },
   "devDependencies": {
+    "rimraf": "^5.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0",
-    "rimraf": "^5.0.0"
+    "vitest": "^4.1.0"
   },
   "author": "Joshua Spinak",
   "license": "MIT"
