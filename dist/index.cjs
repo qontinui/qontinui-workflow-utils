@@ -64,6 +64,7 @@ __export(index_exports, {
   STOP_ON_FAILURE_SETTING: () => STOP_ON_FAILURE_SETTING,
   TEST_ICON_DATA: () => TEST_ICON_DATA,
   TIMEOUT_SETTING: () => TIMEOUT_SETTING,
+  USE_WORKTREE_SETTING: () => USE_WORKTREE_SETTING,
   WORKFLOW_SETTINGS_CONFIG: () => WORKFLOW_SETTINGS_CONFIG,
   autoNameFromMessage: () => autoNameFromMessage,
   buildExportConfig: () => buildExportConfig,
@@ -930,6 +931,13 @@ var APPROVAL_GATE_SETTING = {
   tooltip: "Pause for human review after each agentic phase before continuing to verification",
   visible: (f) => f.hasAiPrompts
 };
+var USE_WORKTREE_SETTING = {
+  key: "use_worktree",
+  type: "boolean",
+  label: "Run in isolated worktree",
+  defaultValue: false,
+  tooltip: "Create a new git branch and worktree for this run. Changes stay isolated until merged."
+};
 var LOG_WATCH_SETTING = {
   key: "log_watch_enabled",
   type: "boolean",
@@ -1093,7 +1101,8 @@ var WORKFLOW_SETTINGS_CONFIG = [
       CONTEXT_MANAGEMENT_SETTING,
       CONSTRAINT_OVERRIDES_SETTING,
       STOP_ON_FAILURE_SETTING,
-      APPROVAL_GATE_SETTING
+      APPROVAL_GATE_SETTING,
+      USE_WORKTREE_SETTING
     ]
   },
   {
@@ -3436,6 +3445,7 @@ function appendCheckToml(lines, check) {
   STOP_ON_FAILURE_SETTING,
   TEST_ICON_DATA,
   TIMEOUT_SETTING,
+  USE_WORKTREE_SETTING,
   WORKFLOW_SETTINGS_CONFIG,
   autoNameFromMessage,
   buildExportConfig,

@@ -234,6 +234,38 @@ export const APPROVAL_GATE_SETTING: BooleanSettingDef = {
   visible: (f) => f.hasAiPrompts,
 };
 
+export const WORKFLOW_ARCHITECTURE_SETTING: SelectSettingDef = {
+  key: "workflow_architecture",
+  type: "select",
+  label: "Workflow Architecture",
+  defaultValue: "traditional",
+  options: [
+    { value: "traditional", label: "Traditional (verify → fix loop)" },
+    { value: "agentic_verification", label: "Agentic Verification (verifier → worker loop)" },
+    { value: "multi_agent_pipeline", label: "Multi-Agent Pipeline (specialized agent DAG)" },
+  ],
+  description:
+    "Execution architecture for the verification-agentic loop. Multi-Agent Pipeline uses specialized agents (analyst, locator, implementer, verifier) in a dependency-ordered DAG.",
+  visible: (f) => f.hasAiPrompts,
+};
+
+export const PIPELINE_CONFIG_SETTING: CustomSettingDef = {
+  key: "multi_agent_pipeline_config",
+  type: "custom",
+  label: "Pipeline Agent Configuration",
+  customType: "pipeline_config",
+  visible: (f) => f.hasAiPrompts,
+};
+
+export const USE_WORKTREE_SETTING: BooleanSettingDef = {
+  key: "use_worktree",
+  type: "boolean",
+  label: "Run in isolated worktree",
+  defaultValue: false,
+  tooltip:
+    "Create a new git branch and worktree for this run. Changes stay isolated until merged.",
+};
+
 export const LOG_WATCH_SETTING: BooleanSettingDef = {
   key: "log_watch_enabled",
   type: "boolean",
@@ -425,6 +457,9 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
       CONSTRAINT_OVERRIDES_SETTING,
       STOP_ON_FAILURE_SETTING,
       APPROVAL_GATE_SETTING,
+      WORKFLOW_ARCHITECTURE_SETTING,
+      PIPELINE_CONFIG_SETTING,
+      USE_WORKTREE_SETTING,
     ],
   },
   {
