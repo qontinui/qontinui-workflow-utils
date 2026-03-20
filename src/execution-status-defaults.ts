@@ -12,7 +12,7 @@ export function createDefaultRoutingStatus(): RoutingStatus {
     enabled: false,
     decision: null,
     config: {
-      simpleModel: "claude-3-5-haiku-20241022",
+      simpleModel: "claude-haiku-4-5-20251001",
       mediumModel: "claude-sonnet-4-20250514",
       complexModel: "claude-opus-4-20250514",
     },

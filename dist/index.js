@@ -559,7 +559,7 @@ function createDefaultRoutingStatus() {
     enabled: false,
     decision: null,
     config: {
-      simpleModel: "claude-3-5-haiku-20241022",
+      simpleModel: "claude-haiku-4-5-20251001",
       mediumModel: "claude-sonnet-4-20250514",
       complexModel: "claude-opus-4-20250514"
     }
@@ -745,6 +745,26 @@ var APPROVAL_GATE_SETTING = {
   tooltip: "Pause for human review after each agentic phase before continuing to verification",
   visible: (f) => f.hasAiPrompts
 };
+var WORKFLOW_ARCHITECTURE_SETTING = {
+  key: "workflow_architecture",
+  type: "select",
+  label: "Workflow Architecture",
+  defaultValue: "traditional",
+  options: [
+    { value: "traditional", label: "Traditional (verify \u2192 fix loop)" },
+    { value: "agentic_verification", label: "Agentic Verification (verifier \u2192 worker loop)" },
+    { value: "multi_agent_pipeline", label: "Multi-Agent Pipeline (specialized agent DAG)" }
+  ],
+  description: "Execution architecture for the verification-agentic loop. Multi-Agent Pipeline uses specialized agents (analyst, locator, implementer, verifier) in a dependency-ordered DAG.",
+  visible: (f) => f.hasAiPrompts
+};
+var PIPELINE_CONFIG_SETTING = {
+  key: "multi_agent_pipeline_config",
+  type: "custom",
+  label: "Pipeline Agent Configuration",
+  customType: "pipeline_config",
+  visible: (f) => f.hasAiPrompts
+};
 var USE_WORKTREE_SETTING = {
   key: "use_worktree",
   type: "boolean",
@@ -916,6 +936,8 @@ var WORKFLOW_SETTINGS_CONFIG = [
       CONSTRAINT_OVERRIDES_SETTING,
       STOP_ON_FAILURE_SETTING,
       APPROVAL_GATE_SETTING,
+      WORKFLOW_ARCHITECTURE_SETTING,
+      PIPELINE_CONFIG_SETTING,
       USE_WORKTREE_SETTING
     ]
   },
@@ -3245,6 +3267,7 @@ export {
   MODEL_PRESETS,
   MODEL_SETTING,
   PER_PHASE_MODEL_SETTING,
+  PIPELINE_CONFIG_SETTING,
   PROMPT_TEMPLATE_SETTING,
   PROVIDER_OPTIONS,
   PROVIDER_SETTING,
@@ -3259,6 +3282,7 @@ export {
   TEST_ICON_DATA,
   TIMEOUT_SETTING,
   USE_WORKTREE_SETTING,
+  WORKFLOW_ARCHITECTURE_SETTING,
   WORKFLOW_SETTINGS_CONFIG,
   autoNameFromMessage,
   buildExportConfig,
