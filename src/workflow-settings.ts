@@ -266,6 +266,20 @@ export const USE_WORKTREE_SETTING: BooleanSettingDef = {
     "Create a new git branch and worktree for this run. Changes stay isolated until merged.",
 };
 
+export const ROLLBACK_POLICY_SETTING: SelectSettingDef = {
+  key: "rollback_policy",
+  type: "select",
+  label: "Rollback Policy",
+  defaultValue: "none",
+  options: [
+    { value: "none", label: "None (keep all changes)" },
+    { value: "last_good", label: "Last Good (revert to best iteration)" },
+    { value: "clean", label: "Clean (revert to pre-workflow state)" },
+  ],
+  description:
+    "Automatic git rollback when the workflow fails. 'Last Good' reverts to the iteration with fewest failures. 'Clean' reverts to the state before the workflow started.",
+};
+
 export const LOG_WATCH_SETTING: BooleanSettingDef = {
   key: "log_watch_enabled",
   type: "boolean",
@@ -460,6 +474,7 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
       WORKFLOW_ARCHITECTURE_SETTING,
       PIPELINE_CONFIG_SETTING,
       USE_WORKTREE_SETTING,
+      ROLLBACK_POLICY_SETTING,
     ],
   },
   {
