@@ -37,6 +37,7 @@ __export(index_exports, {
   DEFAULT_LAYOUT_OPTIONS: () => DEFAULT_LAYOUT_OPTIONS,
   DEFAULT_WARNING_THRESHOLD: () => DEFAULT_WARNING_THRESHOLD,
   ELEMENT_TYPE_STYLES: () => ELEMENT_TYPE_STYLES,
+  ENFORCE_TOKEN_BUDGET_SETTING: () => ENFORCE_TOKEN_BUDGET_SETTING,
   GENERATE_CLAUDE_MODELS: () => GENERATE_CLAUDE_MODELS,
   GENERATE_GEMINI_MODELS: () => GENERATE_GEMINI_MODELS,
   GENERATE_PROVIDER_OPTIONS: () => GENERATE_PROVIDER_OPTIONS,
@@ -57,14 +58,17 @@ __export(index_exports, {
   PROVIDER_SETTING: () => PROVIDER_SETTING,
   REFLECTION_MODE_SETTING: () => REFLECTION_MODE_SETTING,
   RESOLVED_MODEL_PREVIEW_SETTING: () => RESOLVED_MODEL_PREVIEW_SETTING,
+  ROLLBACK_POLICY_SETTING: () => ROLLBACK_POLICY_SETTING,
   SKILL_CATEGORY_ICON_DATA: () => SKILL_CATEGORY_ICON_DATA,
   SMART_ROUTING_SENTINEL: () => SMART_ROUTING_SENTINEL,
   STATE_COLORS: () => STATE_COLORS,
   STATE_MACHINE_LAYOUT_OPTIONS: () => STATE_MACHINE_LAYOUT_OPTIONS,
   STEP_ICON_DATA: () => STEP_ICON_DATA,
   STOP_ON_FAILURE_SETTING: () => STOP_ON_FAILURE_SETTING,
+  STRICT_CWD_SETTING: () => STRICT_CWD_SETTING,
   TEST_ICON_DATA: () => TEST_ICON_DATA,
   TIMEOUT_SETTING: () => TIMEOUT_SETTING,
+  TOOL_TAGS_SETTING: () => TOOL_TAGS_SETTING,
   USE_WORKTREE_SETTING: () => USE_WORKTREE_SETTING,
   WORKFLOW_ARCHITECTURE_SETTING: () => WORKFLOW_ARCHITECTURE_SETTING,
   WORKFLOW_SETTINGS_CONFIG: () => WORKFLOW_SETTINGS_CONFIG,
@@ -953,12 +957,45 @@ var PIPELINE_CONFIG_SETTING = {
   customType: "pipeline_config",
   visible: (f) => f.hasAiPrompts
 };
+var ENFORCE_TOKEN_BUDGET_SETTING = {
+  key: "enforce_token_budget",
+  type: "boolean",
+  label: "Enforce Token Budget",
+  defaultValue: false,
+  tooltip: "Stop execution if accumulated token usage exceeds the context token budget. When disabled, only logs warnings.",
+  visible: (f) => f.hasAiPrompts
+};
+var STRICT_CWD_SETTING = {
+  key: "strict_cwd",
+  type: "boolean",
+  label: "Strict working directory",
+  defaultValue: false,
+  tooltip: "Restrict step working directories to the workspace boundary. Steps cannot resolve paths outside the workspace root."
+};
+var TOOL_TAGS_SETTING = {
+  key: "tool_tags",
+  type: "custom",
+  label: "Tool tags",
+  customType: "tool_tags_input"
+};
 var USE_WORKTREE_SETTING = {
   key: "use_worktree",
   type: "boolean",
   label: "Run in isolated worktree",
   defaultValue: false,
   tooltip: "Create a new git branch and worktree for this run. Changes stay isolated until merged."
+};
+var ROLLBACK_POLICY_SETTING = {
+  key: "rollback_policy",
+  type: "select",
+  label: "Rollback Policy",
+  defaultValue: "none",
+  options: [
+    { value: "none", label: "None (keep all changes)" },
+    { value: "last_good", label: "Last Good (revert to best iteration)" },
+    { value: "clean", label: "Clean (revert to pre-workflow state)" }
+  ],
+  description: "Automatic git rollback when the workflow fails. 'Last Good' reverts to the iteration with fewest failures. 'Clean' reverts to the state before the workflow started."
 };
 var LOG_WATCH_SETTING = {
   key: "log_watch_enabled",
@@ -1123,10 +1160,13 @@ var WORKFLOW_SETTINGS_CONFIG = [
       CONTEXT_MANAGEMENT_SETTING,
       CONSTRAINT_OVERRIDES_SETTING,
       STOP_ON_FAILURE_SETTING,
+      ENFORCE_TOKEN_BUDGET_SETTING,
       APPROVAL_GATE_SETTING,
       WORKFLOW_ARCHITECTURE_SETTING,
       PIPELINE_CONFIG_SETTING,
-      USE_WORKTREE_SETTING
+      USE_WORKTREE_SETTING,
+      STRICT_CWD_SETTING,
+      ROLLBACK_POLICY_SETTING
     ]
   },
   {
@@ -1144,7 +1184,8 @@ var WORKFLOW_SETTINGS_CONFIG = [
         type: "custom",
         label: "Tags",
         customType: "tags_input"
-      }
+      },
+      TOOL_TAGS_SETTING
     ]
   }
 ];
@@ -3442,6 +3483,7 @@ function appendCheckToml(lines, check) {
   DEFAULT_LAYOUT_OPTIONS,
   DEFAULT_WARNING_THRESHOLD,
   ELEMENT_TYPE_STYLES,
+  ENFORCE_TOKEN_BUDGET_SETTING,
   GENERATE_CLAUDE_MODELS,
   GENERATE_GEMINI_MODELS,
   GENERATE_PROVIDER_OPTIONS,
@@ -3462,14 +3504,17 @@ function appendCheckToml(lines, check) {
   PROVIDER_SETTING,
   REFLECTION_MODE_SETTING,
   RESOLVED_MODEL_PREVIEW_SETTING,
+  ROLLBACK_POLICY_SETTING,
   SKILL_CATEGORY_ICON_DATA,
   SMART_ROUTING_SENTINEL,
   STATE_COLORS,
   STATE_MACHINE_LAYOUT_OPTIONS,
   STEP_ICON_DATA,
   STOP_ON_FAILURE_SETTING,
+  STRICT_CWD_SETTING,
   TEST_ICON_DATA,
   TIMEOUT_SETTING,
+  TOOL_TAGS_SETTING,
   USE_WORKTREE_SETTING,
   WORKFLOW_ARCHITECTURE_SETTING,
   WORKFLOW_SETTINGS_CONFIG,
