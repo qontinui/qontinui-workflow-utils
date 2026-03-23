@@ -257,6 +257,31 @@ export const PIPELINE_CONFIG_SETTING: CustomSettingDef = {
   visible: (f) => f.hasAiPrompts,
 };
 
+export const ENFORCE_TOKEN_BUDGET_SETTING: BooleanSettingDef = {
+  key: "enforce_token_budget",
+  type: "boolean",
+  label: "Enforce Token Budget",
+  defaultValue: false,
+  tooltip: "Stop execution if accumulated token usage exceeds the context token budget. When disabled, only logs warnings.",
+  visible: (f) => f.hasAiPrompts,
+};
+
+export const STRICT_CWD_SETTING: BooleanSettingDef = {
+  key: "strict_cwd",
+  type: "boolean",
+  label: "Strict working directory",
+  defaultValue: false,
+  tooltip:
+    "Restrict step working directories to the workspace boundary. Steps cannot resolve paths outside the workspace root.",
+};
+
+export const TOOL_TAGS_SETTING: CustomSettingDef = {
+  key: "tool_tags",
+  type: "custom",
+  label: "Tool tags",
+  customType: "tool_tags_input",
+};
+
 export const USE_WORKTREE_SETTING: BooleanSettingDef = {
   key: "use_worktree",
   type: "boolean",
@@ -470,10 +495,12 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
       CONTEXT_MANAGEMENT_SETTING,
       CONSTRAINT_OVERRIDES_SETTING,
       STOP_ON_FAILURE_SETTING,
+      ENFORCE_TOKEN_BUDGET_SETTING,
       APPROVAL_GATE_SETTING,
       WORKFLOW_ARCHITECTURE_SETTING,
       PIPELINE_CONFIG_SETTING,
       USE_WORKTREE_SETTING,
+      STRICT_CWD_SETTING,
       ROLLBACK_POLICY_SETTING,
     ],
   },
@@ -493,6 +520,7 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
         label: "Tags",
         customType: "tags_input",
       },
+      TOOL_TAGS_SETTING,
     ],
   },
 ] as const;
