@@ -110,6 +110,7 @@ interface CustomSettingDef {
     label: string;
     /** Identifier the app uses to decide which custom renderer to show */
     customType: string;
+    tooltip?: string;
     visible?: (features: WorkflowFeatures) => boolean;
 }
 type SettingDef = BooleanSettingDef | NumberSettingDef | SelectSettingDef | CustomSettingDef;

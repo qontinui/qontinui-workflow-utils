@@ -784,7 +784,8 @@ var TOOL_TAGS_SETTING = {
   key: "tool_tags",
   type: "custom",
   label: "Tool tags",
-  customType: "tool_tags_input"
+  customType: "tool_tags_input",
+  tooltip: "Tags that control which MCP tools are available to AI steps. Only tools matching at least one tag will be offered."
 };
 var USE_WORKTREE_SETTING = {
   key: "use_worktree",

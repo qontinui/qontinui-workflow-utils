@@ -55,6 +55,7 @@ export interface CustomSettingDef {
   label: string;
   /** Identifier the app uses to decide which custom renderer to show */
   customType: string;
+  tooltip?: string;
   visible?: (features: WorkflowFeatures) => boolean;
 }
 
@@ -280,6 +281,8 @@ export const TOOL_TAGS_SETTING: CustomSettingDef = {
   type: "custom",
   label: "Tool tags",
   customType: "tool_tags_input",
+  tooltip:
+    "Tags that control which MCP tools are available to AI steps. Only tools matching at least one tag will be offered.",
 };
 
 export const USE_WORKTREE_SETTING: BooleanSettingDef = {
