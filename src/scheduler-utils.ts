@@ -21,6 +21,10 @@ export function describeSchedule(schedule: ScheduleExpression): string {
       return describeInterval(schedule.value);
     case "State":
       return `On state: ${schedule.state_id}`;
+    case "Condition":
+      return schedule.value?.rearm_delay_minutes
+        ? `On condition (rearm: ${schedule.value.rearm_delay_minutes}min)`
+        : "On condition";
   }
 }
 
