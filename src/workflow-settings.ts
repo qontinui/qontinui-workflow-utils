@@ -294,6 +294,37 @@ export const USE_WORKTREE_SETTING: BooleanSettingDef = {
     "Create a new git branch and worktree for this run. Changes stay isolated until merged.",
 };
 
+export const HTN_ENABLED_SETTING: BooleanSettingDef = {
+  key: "htn_enabled",
+  type: "boolean",
+  label: "Enable HTN Planning",
+  defaultValue: false,
+  tooltip:
+    "Enable Hierarchical Task Network planning. When active, the loop " +
+    "attempts structured plan-based fixes using a state machine before " +
+    "falling back to AI agentic sessions.",
+};
+
+export const HTN_UI_BRIDGE_URL_SETTING: CustomSettingDef = {
+  key: "htn_ui_bridge_url",
+  type: "custom",
+  label: "UI Bridge URL",
+  customType: "htn_ui_bridge_url",
+  tooltip:
+    "URL of the UI Bridge endpoint for querying element state during HTN planning. " +
+    "Leave empty for plan-only mode without GUI execution.",
+};
+
+export const HTN_STATE_MACHINE_PATH_SETTING: CustomSettingDef = {
+  key: "htn_state_machine_path",
+  type: "custom",
+  label: "State Machine Path",
+  customType: "htn_state_machine_path",
+  tooltip:
+    "Path to a serialized state machine JSON file. " +
+    "When empty, defaults to the bundled runner_state_machine.json.",
+};
+
 export const ROLLBACK_POLICY_SETTING: SelectSettingDef = {
   key: "rollback_policy",
   type: "select",
@@ -505,6 +536,15 @@ export const WORKFLOW_SETTINGS_CONFIG: readonly SettingsSection[] = [
       USE_WORKTREE_SETTING,
       STRICT_CWD_SETTING,
       ROLLBACK_POLICY_SETTING,
+    ],
+  },
+  {
+    id: "htn",
+    label: "HTN Planning",
+    settings: [
+      HTN_ENABLED_SETTING,
+      HTN_UI_BRIDGE_URL_SETTING,
+      HTN_STATE_MACHINE_PATH_SETTING,
     ],
   },
   {
