@@ -19,12 +19,19 @@ export function describeSchedule(schedule: ScheduleExpression): string {
       return describeCron(schedule.value);
     case "Interval":
       return describeInterval(schedule.value);
-    case "State":
-      return `On state: ${schedule.state_id}`;
     case "Condition":
       return schedule.value?.rearm_delay_minutes
         ? `On condition (rearm: ${schedule.value.rearm_delay_minutes}min)`
         : "On condition";
+    default: {
+      // Fallback for runner-specific schedule variants not in the wire contract
+      // (e.g. "State" schedules carry a state_id via the index signature).
+      const anySchedule = schedule as { type?: string; state_id?: string };
+      if (anySchedule.type === "State" && typeof anySchedule.state_id === "string") {
+        return `On state: ${anySchedule.state_id}`;
+      }
+      return `Schedule: ${anySchedule.type ?? "unknown"}`;
+    }
   }
 }
 
@@ -62,6 +69,10 @@ export function describeTaskType(task: ScheduledTaskType): string {
       return `Prompt: ${task.prompt_id}`;
     case "AutoFix":
       return "Auto-Fix";
+    case "Watcher":
+      return `Watcher: ${task.watcher_id}`;
+    case "BackgroundCapture":
+      return `Background capture (every ${task.capture_interval_secs}s)`;
   }
 }
 

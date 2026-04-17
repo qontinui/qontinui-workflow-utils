@@ -5,7 +5,7 @@
  * frontends to eliminate duplication.
  */
 
-import type { UnifiedStep } from "@qontinui/shared-types/workflow";
+import type { CanonicalStep, UnifiedStep } from "@qontinui/shared-types/workflow";
 
 // =============================================================================
 // Types
@@ -26,9 +26,11 @@ export interface StepValidationIssue {
  * Returns an empty array if the step is fully configured.
  */
 export function getStepValidationIssues(
-  step: UnifiedStep,
+  rawStep: UnifiedStep,
 ): StepValidationIssue[] {
   const issues: StepValidationIssue[] = [];
+  // Narrow through the canonical union — see note in `getStepSubtitle`.
+  const step = rawStep as CanonicalStep;
 
   switch (step.type) {
     case "command": {
@@ -105,7 +107,9 @@ export function getStepValidationIssues(
 /**
  * Check if a step still needs configuration before it can run.
  */
-export function needsConfig(step: UnifiedStep): boolean {
+export function needsConfig(rawStep: UnifiedStep): boolean {
+  // Narrow through the canonical union — see note in `getStepSubtitle`.
+  const step = rawStep as CanonicalStep;
   switch (step.type) {
     case "command":
       if (step.check_group_id) return false;
@@ -133,7 +137,11 @@ export function needsConfig(step: UnifiedStep): boolean {
  * Get a human-readable subtitle/description for a step.
  * Used in the step list to show what the step does at a glance.
  */
-export function getStepSubtitle(step: UnifiedStep, maxLen = 60): string {
+export function getStepSubtitle(rawStep: UnifiedStep, maxLen = 60): string {
+  // UnifiedStep's fallback arm (`{ [k: string]: unknown }`) collapses typed
+  // fields to `unknown` after a `type` discriminator narrow, so we treat the
+  // step as its canonical form for readable property access.
+  const step = rawStep as CanonicalStep;
   switch (step.type) {
     case "command": {
       if (step.check_group_id) return `Group: ${step.check_group_id}`;

@@ -380,8 +380,8 @@ export function getActionColorConfig(actionType: string): ActionColorConfig {
  */
 export function computeActionDuration(action: {
   type: string;
-  text?: string;
-  delay_ms?: number;
+  text?: string | null;
+  delay_ms?: number | null;
 }): number {
   switch (action.type) {
     case "click":

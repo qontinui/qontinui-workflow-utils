@@ -6,9 +6,16 @@
  */
 
 import type {
+  ConstraintCheck,
   ConstraintSeverity,
-  ConstraintCheckType,
 } from "@qontinui/shared-types/constraints";
+
+/**
+ * Discriminator union of `ConstraintCheck.type` values.
+ * Derived from `ConstraintCheck` so it stays in sync with the generated wire
+ * contract even though the generator doesn't emit a standalone enum alias.
+ */
+export type ConstraintCheckType = ConstraintCheck["type"];
 
 // ============================================================================
 // Built-in Constraint IDs

@@ -90,7 +90,7 @@ export function getTotalStepCount(workflow: UnifiedWorkflow): number {
 }
 
 export function getStepPhase(step: UnifiedStep): WorkflowPhase {
-  return step.phase;
+  return (step as { phase: WorkflowPhase }).phase;
 }
 
 export function canStepExistInPhase(
@@ -127,6 +127,8 @@ export function normalizeToPhases(
       timeout_seconds: workflow.timeout_seconds,
       provider: workflow.provider,
       model: workflow.model,
+      approval_gate: false,
+      completion_prompts_first: false,
     },
   ];
 }

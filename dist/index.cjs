@@ -344,7 +344,9 @@ function normalizeToPhases(workflow) {
       max_iterations: workflow.max_iterations,
       timeout_seconds: workflow.timeout_seconds,
       provider: workflow.provider,
-      model: workflow.model
+      model: workflow.model,
+      approval_gate: false,
+      completion_prompts_first: false
     }
   ];
 }
@@ -615,10 +617,15 @@ function describeSchedule(schedule) {
       return describeCron(schedule.value);
     case "Interval":
       return describeInterval(schedule.value);
-    case "State":
-      return `On state: ${schedule.state_id}`;
     case "Condition":
       return schedule.value?.rearm_delay_minutes ? `On condition (rearm: ${schedule.value.rearm_delay_minutes}min)` : "On condition";
+    default: {
+      const anySchedule = schedule;
+      if (anySchedule.type === "State" && typeof anySchedule.state_id === "string") {
+        return `On state: ${anySchedule.state_id}`;
+      }
+      return `Schedule: ${anySchedule.type ?? "unknown"}`;
+    }
   }
 }
 function describeCron(cron) {
@@ -653,6 +660,10 @@ function describeTaskType(task) {
       return `Prompt: ${task.prompt_id}`;
     case "AutoFix":
       return "Auto-Fix";
+    case "Watcher":
+      return `Watcher: ${task.watcher_id}`;
+    case "BackgroundCapture":
+      return `Background capture (every ${task.capture_interval_secs}s)`;
   }
 }
 function getSchedulerStatusColor(status) {
@@ -1368,8 +1379,9 @@ function resolveModelForPhase(phase, overrides, workflowModel, globalModel) {
 }
 
 // src/step-validation.ts
-function getStepValidationIssues(step) {
+function getStepValidationIssues(rawStep) {
   const issues = [];
+  const step = rawStep;
   switch (step.type) {
     case "command": {
       if (!step.command && !step.test_type && !step.check_type && !step.check_group_id && !step.test_id) {
@@ -1425,7 +1437,8 @@ function getStepValidationIssues(step) {
   }
   return issues;
 }
-function needsConfig(step) {
+function needsConfig(rawStep) {
+  const step = rawStep;
   switch (step.type) {
     case "command":
       if (step.check_group_id) return false;
@@ -1445,7 +1458,8 @@ function needsConfig(step) {
       return false;
   }
 }
-function getStepSubtitle(step, maxLen = 60) {
+function getStepSubtitle(rawStep, maxLen = 60) {
+  const step = rawStep;
   switch (step.type) {
     case "command": {
       if (step.check_group_id) return `Group: ${step.check_group_id}`;
