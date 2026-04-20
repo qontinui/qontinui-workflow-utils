@@ -146,7 +146,7 @@ export function getStepSubtitle(rawStep: UnifiedStep, maxLen = 60): string {
     case "command": {
       if (step.check_group_id) return `Group: ${step.check_group_id}`;
       if (step.check_type)
-        return step.command || step.tool || step.check_type || "Configure check...";
+        return step.command || step.tool || (step.check_type as string) || "Configure check...";
       if (step.test_type || step.test_id) {
         if (step.command) return step.command;
         if (step.test_type === "playwright") return "Browser test";

@@ -20,8 +20,8 @@ export function describeSchedule(schedule: ScheduleExpression): string {
     case "Interval":
       return describeInterval(schedule.value);
     case "Condition":
-      return schedule.value?.rearm_delay_minutes
-        ? `On condition (rearm: ${schedule.value.rearm_delay_minutes}min)`
+      return schedule.value?.rearmDelayMinutes
+        ? `On condition (rearm: ${schedule.value.rearmDelayMinutes}min)`
         : "On condition";
     default: {
       // Fallback for runner-specific schedule variants not in the wire contract
@@ -96,17 +96,17 @@ export function getSchedulerStatusColor(
 }
 
 export function isScheduledTaskRunning(task: ScheduledTask): boolean {
-  return task.last_run?.status === "running";
+  return task.lastRun?.status === "running";
 }
 
 export function hasCompletedSuccessfully(task: ScheduledTask): boolean {
-  return task.last_run?.success === true;
+  return task.lastRun?.success === true;
 }
 
 export function getTimeUntilNextRun(task: ScheduledTask): string | null {
-  if (!task.next_run) return null;
+  if (!task.nextRun) return null;
   try {
-    const diff = new Date(task.next_run).getTime() - Date.now();
+    const diff = new Date(task.nextRun).getTime() - Date.now();
     if (diff < 0) return "Overdue";
     const seconds = Math.floor(diff / 1000);
     if (seconds < 60) return `${seconds}s`;
@@ -122,45 +122,45 @@ export function getTimeUntilNextRun(task: ScheduledTask): string | null {
 }
 
 export function isWaitingForConditions(task: ScheduledTask): boolean {
-  return task.condition_status !== undefined && task.condition_status !== null;
+  return task.conditionStatus !== undefined && task.conditionStatus !== null;
 }
 
 export function hasConditions(task: ScheduledTask): boolean {
   if (!task.conditions) return false;
-  const idleEnabled = task.conditions.require_idle?.enabled ?? false;
+  const idleEnabled = task.conditions.requireIdle?.enabled ?? false;
   const repoEnabled =
-    task.conditions.require_repo_inactive?.enabled === true &&
-    (task.conditions.require_repo_inactive?.repositories?.length ?? 0) > 0;
+    task.conditions.requireRepoInactive?.enabled === true &&
+    (task.conditions.requireRepoInactive?.repositories?.length ?? 0) > 0;
   return idleEnabled || repoEnabled;
 }
 
 export function describeConditions(conditions: ScheduleConditions): string {
   const parts: string[] = [];
-  if (conditions.require_idle?.enabled) parts.push("Wait for idle");
-  if (conditions.require_repo_inactive?.enabled) {
-    const repos = conditions.require_repo_inactive.repositories;
+  if (conditions.requireIdle?.enabled) parts.push("Wait for idle");
+  if (conditions.requireRepoInactive?.enabled) {
+    const repos = conditions.requireRepoInactive.repositories;
     if (repos.length === 1)
       parts.push(
-        `Wait for repo inactive (${repos[0].inactive_minutes}min)`,
+        `Wait for repo inactive (${repos[0].inactiveMinutes}min)`,
       );
     else if (repos.length > 1)
       parts.push(`Wait for ${repos.length} repos inactive`);
   }
-  if (conditions.timeout_minutes)
-    parts.push(`timeout: ${conditions.timeout_minutes}min`);
+  if (conditions.timeoutMinutes)
+    parts.push(`timeout: ${conditions.timeoutMinutes}min`);
   return parts.length > 0 ? parts.join(", ") : "No conditions";
 }
 
 export function getConditionStatusText(status: ConditionStatus): string {
-  if (status.timed_out) return "Timed out";
+  if (status.timedOut) return "Timed out";
   const parts: string[] = [];
-  if (status.idle_met !== undefined)
-    parts.push(status.idle_met ? "Idle" : "Waiting for idle");
-  if (status.repo_inactive_met) {
-    const inactive = status.repo_inactive_met.filter(
+  if (status.idleMet !== undefined)
+    parts.push(status.idleMet ? "Idle" : "Waiting for idle");
+  if (status.repoInactiveMet) {
+    const inactive = status.repoInactiveMet.filter(
       ([, met]) => met,
     ).length;
-    const total = status.repo_inactive_met.length;
+    const total = status.repoInactiveMet.length;
     parts.push(
       inactive === total
         ? "Repos inactive"

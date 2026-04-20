@@ -26,7 +26,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@qontinui/shared-types": "file:../qontinui-schemas/ts"
+    "@qontinui/shared-types": "file:../qontinui-schemas/ts",
+    "typescript-eslint": "^8.58.2"
   },
   "devDependencies": {
     "rimraf": "^5.0.0",

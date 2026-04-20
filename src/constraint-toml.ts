@@ -65,24 +65,24 @@ export function generateConstraintToml(
 
   // -- [resources] section --
   const hasResources =
-    resourceLimits.max_wall_time_secs != null ||
-    resourceLimits.max_files_modified != null ||
-    resourceLimits.max_agentic_time_ms != null ||
-    resourceLimits.warning_threshold != null;
+    resourceLimits.maxWallTimeSecs != null ||
+    resourceLimits.maxFilesModified != null ||
+    resourceLimits.maxAgenticTimeMs != null ||
+    resourceLimits.warningThreshold != null;
 
   if (hasResources) {
     lines.push("[resources]");
-    if (resourceLimits.max_wall_time_secs != null) {
-      lines.push(`max_wall_time_secs = ${resourceLimits.max_wall_time_secs}`);
+    if (resourceLimits.maxWallTimeSecs != null) {
+      lines.push(`max_wall_time_secs = ${resourceLimits.maxWallTimeSecs}`);
     }
-    if (resourceLimits.max_files_modified != null) {
-      lines.push(`max_files_modified = ${resourceLimits.max_files_modified}`);
+    if (resourceLimits.maxFilesModified != null) {
+      lines.push(`max_files_modified = ${resourceLimits.maxFilesModified}`);
     }
-    if (resourceLimits.max_agentic_time_ms != null) {
-      lines.push(`max_agentic_time_ms = ${resourceLimits.max_agentic_time_ms}`);
+    if (resourceLimits.maxAgenticTimeMs != null) {
+      lines.push(`max_agentic_time_ms = ${resourceLimits.maxAgenticTimeMs}`);
     }
-    if (resourceLimits.warning_threshold != null) {
-      lines.push(`warning_threshold = ${resourceLimits.warning_threshold}`);
+    if (resourceLimits.warningThreshold != null) {
+      lines.push(`warning_threshold = ${resourceLimits.warningThreshold}`);
     }
     lines.push("");
   }

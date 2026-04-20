@@ -18,7 +18,7 @@ export function createSummaryStep(): PromptStep {
     phase: "completion",
     name: "AI Summary",
     content: DEFAULT_SUMMARY_PROMPT,
-    is_summary_step: true,
+    isSummaryStep: true,
   };
 }
 
@@ -66,9 +66,9 @@ export function createDefaultStep(
         type: "workflow",
         phase: phase as "setup" | "verification" | "completion",
         name: "Workflow",
-        workflow_id: "",
-        workflow_name: "",
-      } as WorkflowStep as UnifiedStep;
+        workflowId: "",
+        workflowName: "",
+      } as unknown as WorkflowStep as UnifiedStep;
     default:
       throw new Error(`Unknown step type: ${type}`);
   }
@@ -76,14 +76,24 @@ export function createDefaultStep(
 
 export function createDefaultWorkflow(
   includeSummaryStep: boolean = true,
-): Omit<UnifiedWorkflow, "id" | "created_at" | "modified_at"> {
+): Pick<
+  UnifiedWorkflow,
+  | "name"
+  | "description"
+  | "setupSteps"
+  | "verificationSteps"
+  | "agenticSteps"
+  | "completionSteps"
+  | "category"
+  | "tags"
+> {
   return {
     name: "",
     description: "",
-    setup_steps: [],
-    verification_steps: [],
-    agentic_steps: [],
-    completion_steps: includeSummaryStep ? [createSummaryStep()] : [],
+    setupSteps: [],
+    verificationSteps: [],
+    agenticSteps: [],
+    completionSteps: includeSummaryStep ? [createSummaryStep()] : [],
     category: "general",
     tags: [],
   };

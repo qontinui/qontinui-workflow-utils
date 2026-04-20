@@ -261,10 +261,10 @@ describe("generateConstraintToml", () => {
   describe("resources section", () => {
     it("generates [resources] with all fields set", () => {
       const limits: ResourceLimits = {
-        max_wall_time_secs: 300,
-        max_files_modified: 10,
-        max_agentic_time_ms: 60000,
-        warning_threshold: 0.8,
+        maxWallTimeSecs: 300,
+        maxFilesModified: 10,
+        maxAgenticTimeMs: 60000,
+        warningThreshold: 0.8,
       };
       const result = generateConstraintToml([], limits);
 
@@ -277,7 +277,7 @@ describe("generateConstraintToml", () => {
 
     it("generates [resources] with partial fields", () => {
       const limits: ResourceLimits = {
-        max_wall_time_secs: 120,
+        maxWallTimeSecs: 120,
       };
       const result = generateConstraintToml([], limits);
 
@@ -295,10 +295,10 @@ describe("generateConstraintToml", () => {
 
     it("omits [resources] when all fields are undefined", () => {
       const limits: ResourceLimits = {
-        max_wall_time_secs: undefined,
-        max_files_modified: undefined,
-        max_agentic_time_ms: undefined,
-        warning_threshold: undefined,
+        maxWallTimeSecs: undefined,
+        maxFilesModified: undefined,
+        maxAgenticTimeMs: undefined,
+        warningThreshold: undefined,
       };
       const result = generateConstraintToml([], limits);
       expect(result).not.toContain("[resources]");
@@ -306,8 +306,8 @@ describe("generateConstraintToml", () => {
 
     it("includes zero values (not treated as unset)", () => {
       const limits: ResourceLimits = {
-        max_wall_time_secs: 0,
-        max_files_modified: 0,
+        maxWallTimeSecs: 0,
+        maxFilesModified: 0,
       };
       const result = generateConstraintToml([], limits);
 
@@ -316,17 +316,17 @@ describe("generateConstraintToml", () => {
       expect(result).toContain("max_files_modified = 0");
     });
 
-    it("renders warning_threshold with decimal value", () => {
+    it("renders warningThreshold with decimal value", () => {
       const limits: ResourceLimits = {
-        warning_threshold: 0.75,
+        warningThreshold: 0.75,
       };
       const result = generateConstraintToml([], limits);
       expect(result).toContain("warning_threshold = 0.75");
     });
 
-    it("renders warning_threshold value of 1.0", () => {
+    it("renders warningThreshold value of 1.0", () => {
       const limits: ResourceLimits = {
-        warning_threshold: 1,
+        warningThreshold: 1,
       };
       const result = generateConstraintToml([], limits);
       expect(result).toContain("warning_threshold = 1");
@@ -684,9 +684,9 @@ describe("generateConstraintToml", () => {
         customCommand("lint", "npm run lint", { timeoutSecs: 60 }),
       ];
       const limits: ResourceLimits = {
-        max_wall_time_secs: 300,
-        max_files_modified: 20,
-        warning_threshold: 0.75,
+        maxWallTimeSecs: 300,
+        maxFilesModified: 20,
+        warningThreshold: 0.75,
       };
 
       const result = generateConstraintToml(constraints, limits);
@@ -722,7 +722,7 @@ describe("generateConstraintToml", () => {
 
     it("generates only builtins + resources (no custom constraints)", () => {
       const constraints = [builtin("no-secrets")];
-      const limits: ResourceLimits = { max_wall_time_secs: 60 };
+      const limits: ResourceLimits = { maxWallTimeSecs: 60 };
       const result = generateConstraintToml(constraints, limits);
 
       expect(result).toContain("[builtins]");
@@ -732,7 +732,7 @@ describe("generateConstraintToml", () => {
 
     it("generates only resources + custom (no builtins)", () => {
       const constraints = [customGrepForbidden("rule", "x")];
-      const limits: ResourceLimits = { max_files_modified: 5 };
+      const limits: ResourceLimits = { maxFilesModified: 5 };
       const result = generateConstraintToml(constraints, limits);
 
       expect(result).not.toContain("[builtins]");
@@ -749,7 +749,7 @@ describe("generateConstraintToml", () => {
     it("ends with a single newline", () => {
       const result = generateConstraintToml(
         [builtin("no-secrets"), customGrepForbidden("test", "x")],
-        { max_wall_time_secs: 60 },
+        { maxWallTimeSecs: 60 },
       );
       expect(result).toMatch(/[^\n]\n$/);
     });
@@ -761,7 +761,7 @@ describe("generateConstraintToml", () => {
           customGrepForbidden("a", "x"),
           customCommand("b", "echo ok"),
         ],
-        { max_wall_time_secs: 60 },
+        { maxWallTimeSecs: 60 },
       );
       // No triple newlines (which would be two consecutive blank lines)
       expect(result).not.toContain("\n\n\n");
@@ -808,7 +808,7 @@ describe("generateConstraintToml", () => {
       // Verify that each non-blank, non-header line is a valid key = value pair
       const result = generateConstraintToml(
         [builtin("no-secrets"), customGrepForbidden("test", "hello")],
-        { max_wall_time_secs: 60 },
+        { maxWallTimeSecs: 60 },
       );
 
       const lines = result.split("\n").filter((l) => l.trim().length > 0);
@@ -877,7 +877,7 @@ describe("generateConstraintToml", () => {
         builtin("no-env-files", false),
       ];
       const result = generateConstraintToml(constraints, {
-        max_wall_time_secs: 100,
+        maxWallTimeSecs: 100,
       });
 
       // Builtins present
@@ -899,10 +899,10 @@ describe("generateConstraintToml", () => {
 
     it("resource limits with zero values are included", () => {
       const limits: ResourceLimits = {
-        max_wall_time_secs: 0,
-        max_files_modified: 0,
-        max_agentic_time_ms: 0,
-        warning_threshold: 0,
+        maxWallTimeSecs: 0,
+        maxFilesModified: 0,
+        maxAgenticTimeMs: 0,
+        warningThreshold: 0,
       };
       const result = generateConstraintToml([], limits);
       expect(result).toContain("[resources]");
@@ -915,7 +915,7 @@ describe("generateConstraintToml", () => {
     it("resource limits with null values are treated as unset", () => {
       // In TS, null != null is false, so null values should be omitted
       const limits: ResourceLimits = {
-        max_wall_time_secs: null as unknown as undefined,
+        maxWallTimeSecs: null as unknown as undefined,
       };
       const result = generateConstraintToml([], limits);
       // null is not == null in the != null check (null != null → false)

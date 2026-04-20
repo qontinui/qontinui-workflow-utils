@@ -11,31 +11,31 @@ export function detectWorkflowFeatures(
   workflow: UnifiedWorkflow,
 ): WorkflowFeatures {
   const allSteps: UnifiedStep[] = [
-    ...workflow.setup_steps,
-    ...workflow.verification_steps,
-    ...workflow.agentic_steps,
-    ...(workflow.completion_steps ?? []),
+    ...workflow.setupSteps,
+    ...workflow.verificationSteps,
+    ...workflow.agenticSteps,
+    ...(workflow.completionSteps ?? []),
     ...(workflow.stages ?? []).flatMap((s) => [
-      ...s.setup_steps,
-      ...s.verification_steps,
-      ...s.agentic_steps,
-      ...(s.completion_steps ?? []),
+      ...s.setupSteps,
+      ...s.verificationSteps,
+      ...s.agenticSteps,
+      ...(s.completionSteps ?? []),
     ]),
   ];
 
   const hasSetup =
-    workflow.setup_steps.length > 0 ||
-    (workflow.stages ?? []).some((s) => s.setup_steps.length > 0);
+    workflow.setupSteps.length > 0 ||
+    (workflow.stages ?? []).some((s) => s.setupSteps.length > 0);
   const hasVerification =
-    workflow.verification_steps.length > 0 ||
-    (workflow.stages ?? []).some((s) => s.verification_steps.length > 0);
+    workflow.verificationSteps.length > 0 ||
+    (workflow.stages ?? []).some((s) => s.verificationSteps.length > 0);
   const hasAgentic =
-    workflow.agentic_steps.length > 0 ||
-    (workflow.stages ?? []).some((s) => s.agentic_steps.length > 0);
+    workflow.agenticSteps.length > 0 ||
+    (workflow.stages ?? []).some((s) => s.agenticSteps.length > 0);
   const hasCompletion =
-    (workflow.completion_steps ?? []).length > 0 ||
+    (workflow.completionSteps ?? []).length > 0 ||
     (workflow.stages ?? []).some(
-      (s) => (s.completion_steps ?? []).length > 0,
+      (s) => (s.completionSteps ?? []).length > 0,
     );
   const hasUiBridge = allSteps.some((s) => s.type === "ui_bridge");
   const hasAiPrompts = allSteps.some((s) => s.type === "prompt");
@@ -54,35 +54,35 @@ export function detectWorkflowFeatures(
 export function isWorkflowEmpty(workflow: UnifiedWorkflow): boolean {
   if ((workflow.stages ?? []).length > 0) return false;
 
-  const completionSteps = workflow.completion_steps ?? [];
+  const completionSteps = workflow.completionSteps ?? [];
   const hasOnlySummaryStep =
     completionSteps.length === 0 ||
     (completionSteps.length === 1 &&
       completionSteps[0].type === "prompt" &&
-      (completionSteps[0] as PromptStep).is_summary_step === true);
+      (completionSteps[0] as PromptStep).isSummaryStep === true);
 
   return (
-    workflow.setup_steps.length === 0 &&
-    workflow.verification_steps.length === 0 &&
-    workflow.agentic_steps.length === 0 &&
+    workflow.setupSteps.length === 0 &&
+    workflow.verificationSteps.length === 0 &&
+    workflow.agenticSteps.length === 0 &&
     hasOnlySummaryStep
   );
 }
 
 export function getTotalStepCount(workflow: UnifiedWorkflow): number {
   const topLevelCount =
-    (workflow.setup_steps?.length ?? 0) +
-    (workflow.verification_steps?.length ?? 0) +
-    (workflow.agentic_steps?.length ?? 0) +
-    (workflow.completion_steps?.length ?? 0);
+    (workflow.setupSteps?.length ?? 0) +
+    (workflow.verificationSteps?.length ?? 0) +
+    (workflow.agenticSteps?.length ?? 0) +
+    (workflow.completionSteps?.length ?? 0);
 
   const stagesCount = (workflow.stages ?? []).reduce(
     (sum, s) =>
       sum +
-      (s.setup_steps?.length ?? 0) +
-      (s.verification_steps?.length ?? 0) +
-      (s.agentic_steps?.length ?? 0) +
-      (s.completion_steps?.length ?? 0),
+      (s.setupSteps?.length ?? 0) +
+      (s.verificationSteps?.length ?? 0) +
+      (s.agenticSteps?.length ?? 0) +
+      (s.completionSteps?.length ?? 0),
     0,
   );
 
@@ -119,16 +119,16 @@ export function normalizeToPhases(
       id: workflow.id + "-phase-1",
       name: workflow.name,
       description: workflow.description,
-      setup_steps: workflow.setup_steps,
-      verification_steps: workflow.verification_steps,
-      agentic_steps: workflow.agentic_steps,
-      completion_steps: workflow.completion_steps ?? [],
-      max_iterations: workflow.max_iterations,
-      timeout_seconds: workflow.timeout_seconds,
+      setupSteps: workflow.setupSteps,
+      verificationSteps: workflow.verificationSteps,
+      agenticSteps: workflow.agenticSteps,
+      completionSteps: workflow.completionSteps ?? [],
+      maxIterations: workflow.maxIterations,
+      timeoutSeconds: workflow.timeoutSeconds,
       provider: workflow.provider,
       model: workflow.model,
-      approval_gate: false,
-      completion_prompts_first: false,
+      approvalGate: false,
+      completionPromptsFirst: false,
     },
   ];
 }
