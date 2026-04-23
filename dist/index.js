@@ -10,7 +10,7 @@ function createSummaryStep() {
     phase: "completion",
     name: "AI Summary",
     content: DEFAULT_SUMMARY_PROMPT,
-    is_summary_step: true
+    isSummaryStep: true
   };
 }
 function createDefaultStep(type, phase) {
@@ -54,8 +54,8 @@ function createDefaultStep(type, phase) {
         type: "workflow",
         phase,
         name: "Workflow",
-        workflow_id: "",
-        workflow_name: ""
+        workflowId: "",
+        workflowName: ""
       };
     default:
       throw new Error(`Unknown step type: ${type}`);
@@ -65,10 +65,10 @@ function createDefaultWorkflow(includeSummaryStep = true) {
   return {
     name: "",
     description: "",
-    setup_steps: [],
-    verification_steps: [],
-    agentic_steps: [],
-    completion_steps: includeSummaryStep ? [createSummaryStep()] : [],
+    setupSteps: [],
+    verificationSteps: [],
+    agenticSteps: [],
+    completionSteps: includeSummaryStep ? [createSummaryStep()] : [],
     category: "general",
     tags: []
   };
@@ -77,22 +77,22 @@ function createDefaultWorkflow(includeSummaryStep = true) {
 // src/workflow-queries.ts
 function detectWorkflowFeatures(workflow) {
   const allSteps = [
-    ...workflow.setup_steps,
-    ...workflow.verification_steps,
-    ...workflow.agentic_steps,
-    ...workflow.completion_steps ?? [],
+    ...workflow.setupSteps,
+    ...workflow.verificationSteps,
+    ...workflow.agenticSteps,
+    ...workflow.completionSteps ?? [],
     ...(workflow.stages ?? []).flatMap((s) => [
-      ...s.setup_steps,
-      ...s.verification_steps,
-      ...s.agentic_steps,
-      ...s.completion_steps ?? []
+      ...s.setupSteps,
+      ...s.verificationSteps,
+      ...s.agenticSteps,
+      ...s.completionSteps ?? []
     ])
   ];
-  const hasSetup = workflow.setup_steps.length > 0 || (workflow.stages ?? []).some((s) => s.setup_steps.length > 0);
-  const hasVerification = workflow.verification_steps.length > 0 || (workflow.stages ?? []).some((s) => s.verification_steps.length > 0);
-  const hasAgentic = workflow.agentic_steps.length > 0 || (workflow.stages ?? []).some((s) => s.agentic_steps.length > 0);
-  const hasCompletion = (workflow.completion_steps ?? []).length > 0 || (workflow.stages ?? []).some(
-    (s) => (s.completion_steps ?? []).length > 0
+  const hasSetup = workflow.setupSteps.length > 0 || (workflow.stages ?? []).some((s) => s.setupSteps.length > 0);
+  const hasVerification = workflow.verificationSteps.length > 0 || (workflow.stages ?? []).some((s) => s.verificationSteps.length > 0);
+  const hasAgentic = workflow.agenticSteps.length > 0 || (workflow.stages ?? []).some((s) => s.agenticSteps.length > 0);
+  const hasCompletion = (workflow.completionSteps ?? []).length > 0 || (workflow.stages ?? []).some(
+    (s) => (s.completionSteps ?? []).length > 0
   );
   const hasUiBridge = allSteps.some((s) => s.type === "ui_bridge");
   const hasAiPrompts = allSteps.some((s) => s.type === "prompt");
@@ -108,14 +108,14 @@ function detectWorkflowFeatures(workflow) {
 }
 function isWorkflowEmpty(workflow) {
   if ((workflow.stages ?? []).length > 0) return false;
-  const completionSteps = workflow.completion_steps ?? [];
-  const hasOnlySummaryStep = completionSteps.length === 0 || completionSteps.length === 1 && completionSteps[0].type === "prompt" && completionSteps[0].is_summary_step === true;
-  return workflow.setup_steps.length === 0 && workflow.verification_steps.length === 0 && workflow.agentic_steps.length === 0 && hasOnlySummaryStep;
+  const completionSteps = workflow.completionSteps ?? [];
+  const hasOnlySummaryStep = completionSteps.length === 0 || completionSteps.length === 1 && completionSteps[0].type === "prompt" && completionSteps[0].isSummaryStep === true;
+  return workflow.setupSteps.length === 0 && workflow.verificationSteps.length === 0 && workflow.agenticSteps.length === 0 && hasOnlySummaryStep;
 }
 function getTotalStepCount(workflow) {
-  const topLevelCount = (workflow.setup_steps?.length ?? 0) + (workflow.verification_steps?.length ?? 0) + (workflow.agentic_steps?.length ?? 0) + (workflow.completion_steps?.length ?? 0);
+  const topLevelCount = (workflow.setupSteps?.length ?? 0) + (workflow.verificationSteps?.length ?? 0) + (workflow.agenticSteps?.length ?? 0) + (workflow.completionSteps?.length ?? 0);
   const stagesCount = (workflow.stages ?? []).reduce(
-    (sum, s) => sum + (s.setup_steps?.length ?? 0) + (s.verification_steps?.length ?? 0) + (s.agentic_steps?.length ?? 0) + (s.completion_steps?.length ?? 0),
+    (sum, s) => sum + (s.setupSteps?.length ?? 0) + (s.verificationSteps?.length ?? 0) + (s.agenticSteps?.length ?? 0) + (s.completionSteps?.length ?? 0),
     0
   );
   return topLevelCount + stagesCount;
@@ -142,16 +142,16 @@ function normalizeToPhases(workflow) {
       id: workflow.id + "-phase-1",
       name: workflow.name,
       description: workflow.description,
-      setup_steps: workflow.setup_steps,
-      verification_steps: workflow.verification_steps,
-      agentic_steps: workflow.agentic_steps,
-      completion_steps: workflow.completion_steps ?? [],
-      max_iterations: workflow.max_iterations,
-      timeout_seconds: workflow.timeout_seconds,
+      setupSteps: workflow.setupSteps,
+      verificationSteps: workflow.verificationSteps,
+      agenticSteps: workflow.agenticSteps,
+      completionSteps: workflow.completionSteps ?? [],
+      maxIterations: workflow.maxIterations,
+      timeoutSeconds: workflow.timeoutSeconds,
       provider: workflow.provider,
       model: workflow.model,
-      approval_gate: false,
-      completion_prompts_first: false
+      approvalGate: false,
+      completionPromptsFirst: false
     }
   ];
 }
@@ -423,7 +423,7 @@ function describeSchedule(schedule) {
     case "Interval":
       return describeInterval(schedule.value);
     case "Condition":
-      return schedule.value?.rearm_delay_minutes ? `On condition (rearm: ${schedule.value.rearm_delay_minutes}min)` : "On condition";
+      return schedule.value?.rearmDelayMinutes ? `On condition (rearm: ${schedule.value.rearmDelayMinutes}min)` : "On condition";
     default: {
       const anySchedule = schedule;
       if (anySchedule.type === "State" && typeof anySchedule.state_id === "string") {
@@ -488,15 +488,15 @@ function getSchedulerStatusColor(status) {
   }
 }
 function isScheduledTaskRunning(task) {
-  return task.last_run?.status === "running";
+  return task.lastRun?.status === "running";
 }
 function hasCompletedSuccessfully(task) {
-  return task.last_run?.success === true;
+  return task.lastRun?.success === true;
 }
 function getTimeUntilNextRun(task) {
-  if (!task.next_run) return null;
+  if (!task.nextRun) return null;
   try {
-    const diff = new Date(task.next_run).getTime() - Date.now();
+    const diff = new Date(task.nextRun).getTime() - Date.now();
     if (diff < 0) return "Overdue";
     const seconds = Math.floor(diff / 1e3);
     if (seconds < 60) return `${seconds}s`;
@@ -511,40 +511,40 @@ function getTimeUntilNextRun(task) {
   }
 }
 function isWaitingForConditions(task) {
-  return task.condition_status !== void 0 && task.condition_status !== null;
+  return task.conditionStatus !== void 0 && task.conditionStatus !== null;
 }
 function hasConditions(task) {
   if (!task.conditions) return false;
-  const idleEnabled = task.conditions.require_idle?.enabled ?? false;
-  const repoEnabled = task.conditions.require_repo_inactive?.enabled === true && (task.conditions.require_repo_inactive?.repositories?.length ?? 0) > 0;
+  const idleEnabled = task.conditions.requireIdle?.enabled ?? false;
+  const repoEnabled = task.conditions.requireRepoInactive?.enabled === true && (task.conditions.requireRepoInactive?.repositories?.length ?? 0) > 0;
   return idleEnabled || repoEnabled;
 }
 function describeConditions(conditions) {
   const parts = [];
-  if (conditions.require_idle?.enabled) parts.push("Wait for idle");
-  if (conditions.require_repo_inactive?.enabled) {
-    const repos = conditions.require_repo_inactive.repositories;
+  if (conditions.requireIdle?.enabled) parts.push("Wait for idle");
+  if (conditions.requireRepoInactive?.enabled) {
+    const repos = conditions.requireRepoInactive.repositories;
     if (repos.length === 1)
       parts.push(
-        `Wait for repo inactive (${repos[0].inactive_minutes}min)`
+        `Wait for repo inactive (${repos[0].inactiveMinutes}min)`
       );
     else if (repos.length > 1)
       parts.push(`Wait for ${repos.length} repos inactive`);
   }
-  if (conditions.timeout_minutes)
-    parts.push(`timeout: ${conditions.timeout_minutes}min`);
+  if (conditions.timeoutMinutes)
+    parts.push(`timeout: ${conditions.timeoutMinutes}min`);
   return parts.length > 0 ? parts.join(", ") : "No conditions";
 }
 function getConditionStatusText(status) {
-  if (status.timed_out) return "Timed out";
+  if (status.timedOut) return "Timed out";
   const parts = [];
-  if (status.idle_met !== void 0)
-    parts.push(status.idle_met ? "Idle" : "Waiting for idle");
-  if (status.repo_inactive_met) {
-    const inactive = status.repo_inactive_met.filter(
+  if (status.idleMet !== void 0)
+    parts.push(status.idleMet ? "Idle" : "Waiting for idle");
+  if (status.repoInactiveMet) {
+    const inactive = status.repoInactiveMet.filter(
       ([, met]) => met
     ).length;
-    const total = status.repo_inactive_met.length;
+    const total = status.repoInactiveMet.length;
     parts.push(
       inactive === total ? "Repos inactive" : `Repos: ${inactive}/${total} inactive`
     );
@@ -3160,6 +3160,297 @@ function buildExportConfig(config, states, transitions) {
   };
 }
 
+// src/state-machine/scc.ts
+function djb2Hash(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (h << 5) + h + s.charCodeAt(i) | 0;
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+function deriveChunkId(stateIds) {
+  const sorted = stateIds.slice().sort();
+  return "chunk_" + djb2Hash(sorted.join(","));
+}
+function commonDashPrefix(names) {
+  if (names.length === 0) return "";
+  const parts = names.map((n) => n.split("-"));
+  const first = parts[0];
+  let prefixLen = 0;
+  outer: for (let i = 0; i < first.length; i++) {
+    const seg = first[i];
+    for (let j = 1; j < parts.length; j++) {
+      if (parts[j][i] !== seg) break outer;
+    }
+    prefixLen++;
+  }
+  if (prefixLen === 0) return "";
+  const joined = first.slice(0, prefixLen).join("-");
+  return joined.length >= 2 ? joined : "";
+}
+function deriveChunkName(kind, stateIds, nameById) {
+  const names = stateIds.map((id) => nameById.get(id) ?? id);
+  if (names.length === 1) {
+    return names[0];
+  }
+  if (kind === "chain") {
+    const first = names[0];
+    const last = names[names.length - 1];
+    return names.length > 5 ? `${first} \u2192 \u2026 \u2192 ${last}` : `${first} \u2192 ${last}`;
+  }
+  const prefix = commonDashPrefix(names);
+  if (prefix) return `${prefix}-*`;
+  const preview = names.slice(0, 3).join(", ");
+  return `${names.length} states: ${preview}\u2026`;
+}
+function tarjanSCC(adj) {
+  const n = adj.length;
+  const index = new Int32Array(n).fill(-1);
+  const lowlink = new Int32Array(n);
+  const onStack = new Uint8Array(n);
+  for (let i = 0; i < n; i++) index[i] = -1;
+  const stack = [];
+  const sccs = [];
+  const callStack = [];
+  let nextIndex = 0;
+  for (let start = 0; start < n; start++) {
+    if (index[start] !== -1) continue;
+    index[start] = nextIndex;
+    lowlink[start] = nextIndex;
+    nextIndex++;
+    stack.push(start);
+    onStack[start] = 1;
+    callStack.push({ v: start, iter: 0 });
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1];
+      const v = frame.v;
+      const successors = adj[v];
+      if (frame.iter < successors.length) {
+        const w = successors[frame.iter];
+        frame.iter++;
+        if (index[w] === -1) {
+          index[w] = nextIndex;
+          lowlink[w] = nextIndex;
+          nextIndex++;
+          stack.push(w);
+          onStack[w] = 1;
+          callStack.push({ v: w, iter: 0 });
+        } else if (onStack[w]) {
+          if (index[w] < lowlink[v]) lowlink[v] = index[w];
+        }
+      } else {
+        if (lowlink[v] === index[v]) {
+          const comp = [];
+          while (true) {
+            const w = stack.pop();
+            onStack[w] = 0;
+            comp.push(w);
+            if (w === v) break;
+          }
+          sccs.push(comp);
+        }
+        callStack.pop();
+        if (callStack.length > 0) {
+          const parent = callStack[callStack.length - 1].v;
+          if (lowlink[v] < lowlink[parent]) lowlink[parent] = lowlink[v];
+        }
+      }
+    }
+  }
+  return sccs;
+}
+function chunkStateMachine(states, transitions, options = {}) {
+  const n = states.length;
+  const idToIndex = /* @__PURE__ */ new Map();
+  const nameById = /* @__PURE__ */ new Map();
+  for (let i = 0; i < n; i++) {
+    const s = states[i];
+    idToIndex.set(s.state_id, i);
+    nameById.set(s.state_id, s.name);
+  }
+  const adjSets = Array.from({ length: n }, () => /* @__PURE__ */ new Set());
+  const rawEdges = [];
+  const hasSelfLoop = new Uint8Array(n);
+  for (const t of transitions) {
+    for (const from of t.from_states) {
+      const u = idToIndex.get(from);
+      if (u === void 0) continue;
+      for (const to of t.activate_states) {
+        const v = idToIndex.get(to);
+        if (v === void 0) continue;
+        adjSets[u].add(v);
+        rawEdges.push({ u, v, transitionId: t.transition_id });
+        if (u === v) hasSelfLoop[u] = 1;
+      }
+    }
+  }
+  const adj = adjSets.map((s) => Array.from(s));
+  const sccs = tarjanSCC(adj);
+  const sccOfNode = new Int32Array(n);
+  for (let i = 0; i < sccs.length; i++) {
+    for (const v of sccs[i]) sccOfNode[v] = i;
+  }
+  const chainEligible = new Uint8Array(sccs.length);
+  const sccIsScc = new Uint8Array(sccs.length);
+  for (let i = 0; i < sccs.length; i++) {
+    const comp = sccs[i];
+    if (comp.length === 1 && !hasSelfLoop[comp[0]]) {
+      chainEligible[i] = 1;
+    } else {
+      sccIsScc[i] = 1;
+    }
+  }
+  const condOut = /* @__PURE__ */ new Map();
+  const condIn = /* @__PURE__ */ new Map();
+  for (const e of rawEdges) {
+    const fromScc = sccOfNode[e.u];
+    const toScc = sccOfNode[e.v];
+    if (fromScc === toScc) continue;
+    let outMap = condOut.get(fromScc);
+    if (!outMap) {
+      outMap = /* @__PURE__ */ new Map();
+      condOut.set(fromScc, outMap);
+    }
+    let ids = outMap.get(toScc);
+    if (!ids) {
+      ids = [];
+      outMap.set(toScc, ids);
+    }
+    ids.push(e.transitionId);
+    let inMap = condIn.get(toScc);
+    if (!inMap) {
+      inMap = /* @__PURE__ */ new Map();
+      condIn.set(toScc, inMap);
+    }
+    let idsIn = inMap.get(fromScc);
+    if (!idsIn) {
+      idsIn = [];
+      inMap.set(fromScc, idsIn);
+    }
+    idsIn.push(e.transitionId);
+  }
+  const outDegree = (i) => condOut.get(i)?.size ?? 0;
+  const inDegree = (i) => condIn.get(i)?.size ?? 0;
+  const chainOfScc = new Int32Array(sccs.length).fill(-1);
+  for (let i = 0; i < sccs.length; i++) chainOfScc[i] = -1;
+  const chainBuilds = [];
+  function canExtendFromTo(u, w) {
+    if (!chainEligible[u] || !chainEligible[w]) return false;
+    if (outDegree(u) !== 1) return false;
+    if (inDegree(w) !== 1) return false;
+    return true;
+  }
+  function isExtendableFromPredecessor(v) {
+    if (!chainEligible[v]) return false;
+    if (inDegree(v) !== 1) return false;
+    const inMap = condIn.get(v);
+    const predIter = inMap.keys().next();
+    if (predIter.done) return false;
+    const pred = predIter.value;
+    return canExtendFromTo(pred, v);
+  }
+  for (let start = 0; start < sccs.length; start++) {
+    if (!chainEligible[start]) continue;
+    if (chainOfScc[start] !== -1) continue;
+    if (isExtendableFromPredecessor(start)) continue;
+    const build = { sccIndices: [start] };
+    chainOfScc[start] = chainBuilds.length;
+    let cur = start;
+    while (true) {
+      const outMap = condOut.get(cur);
+      if (!outMap || outMap.size !== 1) break;
+      const nextIter = outMap.keys().next();
+      if (nextIter.done) break;
+      const next = nextIter.value;
+      if (!canExtendFromTo(cur, next)) break;
+      if (chainOfScc[next] !== -1) break;
+      build.sccIndices.push(next);
+      chainOfScc[next] = chainBuilds.length;
+      cur = next;
+    }
+    chainBuilds.push(build);
+  }
+  const initialStateId = resolveInitialStateId(states, options);
+  const chunks = [];
+  const sccToChunkId = /* @__PURE__ */ new Map();
+  const stateIndex = /* @__PURE__ */ new Map();
+  for (const build of chainBuilds) {
+    const stateIds = build.sccIndices.map((sccIdx) => {
+      const nodeIdx = sccs[sccIdx][0];
+      return states[nodeIdx].state_id;
+    });
+    const chunkId = deriveChunkId(stateIds);
+    const containsInitialState = initialStateId !== null && stateIds.includes(initialStateId);
+    chunks.push({
+      id: chunkId,
+      kind: "chain",
+      stateIds,
+      name: deriveChunkName("chain", stateIds, nameById),
+      containsInitialState
+    });
+    for (const sccIdx of build.sccIndices) sccToChunkId.set(sccIdx, chunkId);
+    for (const sid of stateIds) stateIndex.set(sid, chunkId);
+  }
+  for (let i = 0; i < sccs.length; i++) {
+    if (chainOfScc[i] !== -1) continue;
+    const comp = sccs[i];
+    const stateIds = comp.map((nodeIdx) => states[nodeIdx].state_id);
+    const kind = sccIsScc[i] ? "scc" : "chain";
+    const chunkId = deriveChunkId(stateIds);
+    const containsInitialState = initialStateId !== null && stateIds.includes(initialStateId);
+    chunks.push({
+      id: chunkId,
+      kind,
+      stateIds,
+      name: deriveChunkName(kind, stateIds, nameById),
+      containsInitialState
+    });
+    sccToChunkId.set(i, chunkId);
+    for (const sid of stateIds) stateIndex.set(sid, chunkId);
+  }
+  const edgeMap = /* @__PURE__ */ new Map();
+  const edgeOrder = [];
+  for (const e of rawEdges) {
+    const fromScc = sccOfNode[e.u];
+    const toScc = sccOfNode[e.v];
+    const fromChunk = sccToChunkId.get(fromScc);
+    const toChunk = sccToChunkId.get(toScc);
+    if (fromChunk === toChunk) continue;
+    const key = fromChunk + "\0" + toChunk;
+    let agg = edgeMap.get(key);
+    if (!agg) {
+      agg = { transitionIds: /* @__PURE__ */ new Set(), transitionIdOrder: [] };
+      edgeMap.set(key, agg);
+      edgeOrder.push({ from: fromChunk, to: toChunk, key });
+    }
+    if (!agg.transitionIds.has(e.transitionId)) {
+      agg.transitionIds.add(e.transitionId);
+      agg.transitionIdOrder.push(e.transitionId);
+    }
+  }
+  const edges = edgeOrder.map(({ from, to, key }) => {
+    const agg = edgeMap.get(key);
+    return {
+      from,
+      to,
+      transitionCount: agg.transitionIds.size,
+      transitionIds: agg.transitionIdOrder
+    };
+  });
+  return { chunks, edges, stateIndex };
+}
+function resolveInitialStateId(states, options) {
+  if (options.initialStateId !== void 0 && options.initialStateId !== null) {
+    return options.initialStateId;
+  }
+  for (const s of states) {
+    if (s.extra_metadata && s.extra_metadata["initial"] === true) {
+      return s.state_id;
+    }
+  }
+  return states.length > 0 ? states[0].state_id : null;
+}
+
 // src/constraint-utils.ts
 var BUILTIN_CONSTRAINT_IDS = [
   "builtin:no-secrets",
@@ -3251,20 +3542,20 @@ function generateConstraintToml(constraints, resourceLimits) {
     }
     lines.push("");
   }
-  const hasResources = resourceLimits.max_wall_time_secs != null || resourceLimits.max_files_modified != null || resourceLimits.max_agentic_time_ms != null || resourceLimits.warning_threshold != null;
+  const hasResources = resourceLimits.maxWallTimeSecs != null || resourceLimits.maxFilesModified != null || resourceLimits.maxAgenticTimeMs != null || resourceLimits.warningThreshold != null;
   if (hasResources) {
     lines.push("[resources]");
-    if (resourceLimits.max_wall_time_secs != null) {
-      lines.push(`max_wall_time_secs = ${resourceLimits.max_wall_time_secs}`);
+    if (resourceLimits.maxWallTimeSecs != null) {
+      lines.push(`max_wall_time_secs = ${resourceLimits.maxWallTimeSecs}`);
     }
-    if (resourceLimits.max_files_modified != null) {
-      lines.push(`max_files_modified = ${resourceLimits.max_files_modified}`);
+    if (resourceLimits.maxFilesModified != null) {
+      lines.push(`max_files_modified = ${resourceLimits.maxFilesModified}`);
     }
-    if (resourceLimits.max_agentic_time_ms != null) {
-      lines.push(`max_agentic_time_ms = ${resourceLimits.max_agentic_time_ms}`);
+    if (resourceLimits.maxAgenticTimeMs != null) {
+      lines.push(`max_agentic_time_ms = ${resourceLimits.maxAgenticTimeMs}`);
     }
-    if (resourceLimits.warning_threshold != null) {
-      lines.push(`warning_threshold = ${resourceLimits.warning_threshold}`);
+    if (resourceLimits.warningThreshold != null) {
+      lines.push(`warning_threshold = ${resourceLimits.warningThreshold}`);
     }
     lines.push("");
   }
@@ -3381,6 +3672,7 @@ export {
   bumpVersion,
   calculateCompressionSavings,
   canStepExistInPhase,
+  chunkStateMachine,
   clearUserSkills,
   compareVersions,
   computeActionDuration,

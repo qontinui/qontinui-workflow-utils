@@ -9,7 +9,7 @@ import { ConstraintCheck, ConstraintSeverity, Constraint, ResourceLimits } from 
 declare function generateStepId(): string;
 declare function createSummaryStep(): PromptStep;
 declare function createDefaultStep(type: UnifiedStep["type"], phase: WorkflowPhase): UnifiedStep;
-declare function createDefaultWorkflow(includeSummaryStep?: boolean): Omit<UnifiedWorkflow, "id" | "created_at" | "modified_at">;
+declare function createDefaultWorkflow(includeSummaryStep?: boolean): Pick<UnifiedWorkflow, "name" | "description" | "setupSteps" | "verificationSteps" | "agenticSteps" | "completionSteps" | "category" | "tags">;
 
 declare function detectWorkflowFeatures(workflow: UnifiedWorkflow): WorkflowFeatures;
 declare function isWorkflowEmpty(workflow: UnifiedWorkflow): boolean;
@@ -782,6 +782,76 @@ declare function getAllElementIds(states: StateMachineState[]): string[];
 declare function buildExportConfig(config: StateMachineConfig, states: StateMachineState[], transitions: StateMachineTransition[]): StateMachineExportFormat;
 
 /**
+ * Chunked state machine graph renderer — pure SCC + chain-compaction utility.
+ *
+ * Decomposes a state machine's directed graph into a condensation DAG of
+ * chunks. Each chunk is either:
+ *   - `"scc"` — a strongly-connected component (size > 1, OR a singleton
+ *     with a self-loop). Represents an intrinsic cycle in the graph.
+ *   - `"chain"` — a merged linear run of chain-eligible singleton SCCs.
+ *
+ * The resulting `ChunkGraph` always has size <= the original state count,
+ * and in practice compresses typical state machines by 5–10x (enough to fit
+ * below the WebView2 renderable ceiling of ~150 nodes).
+ *
+ * This file is pure — no React, no dagre dep. Tarjan's SCC is inlined in
+ * iterative form so `qontinui-workflow-utils` stays dep-free.
+ */
+
+type ChunkKind = "scc" | "chain";
+interface Chunk {
+    /** Stable, derived from contained state ids (not insertion order). */
+    id: string;
+    kind: ChunkKind;
+    /**
+     * State ids in in-chunk order. For chain chunks, the order follows the
+     * path (first → last). For scc chunks, the order is Tarjan output order.
+     */
+    stateIds: string[];
+    /** Auto-derived display name. See "Chunk naming" below. */
+    name: string;
+    containsInitialState: boolean;
+}
+interface ChunkEdge {
+    from: string;
+    to: string;
+    transitionCount: number;
+    transitionIds: string[];
+}
+interface ChunkGraph {
+    chunks: Chunk[];
+    /** One edge per (fromChunk, toChunk) ordered pair, deduplicated. */
+    edges: ChunkEdge[];
+    /** stateId → chunkId lookup. */
+    stateIndex: Map<string, string>;
+}
+interface ChunkStateMachineOptions {
+    /**
+     * Optional override for the initial state. When set, the chunk containing
+     * this state id is flagged `containsInitialState: true`. If unset, falls
+     * back to `extra_metadata.initial === true`, then to `states[0]`.
+     */
+    initialStateId?: string | null;
+}
+/**
+ * Decompose a state machine into a chunked graph via Tarjan's SCC plus
+ * linear chain compaction.
+ *
+ * - Adjacency is derived from `transitions[].from_states × transitions[].activate_states`.
+ * - `exit_states` is IGNORED — deactivation does not create a graph edge.
+ * - Self-loops are detected post-SCC: a singleton SCC with a self-edge is
+ *   emitted as `kind: "scc"` (intrinsic cycle) and is INELIGIBLE for chain
+ *   merging. Pure singletons are chain-eligible.
+ * - Chain compaction: a maximal run of chain-eligible singletons `v1 → v2 →
+ *   … → vk` is merged into a single chain chunk when each interior edge has
+ *   both endpoints chain-eligible, the walked-from vertex has out-degree == 1
+ *   in the condensation DAG, and the walked-to vertex has in-degree == 1.
+ *   The run's starting vertex additionally requires in-degree <= 1 (it may
+ *   have zero, or a single incoming cross-chunk edge, but not two).
+ */
+declare function chunkStateMachine(states: StateMachineState[], transitions: StateMachineTransition[], options?: ChunkStateMachineOptions): ChunkGraph;
+
+/**
  * Constraint Engine Utilities
  *
  * Pure helper functions for working with constraint types.
@@ -849,4 +919,4 @@ declare function tomlStringArray(values: string[]): string;
  */
 declare function generateConstraintToml(constraints: Constraint[], resourceLimits: ResourceLimits): string;
 
-export { ACTION_ACTIVE_LABELS, ACTION_COLOR_CONFIG, ACTION_LABELS, ACTION_TYPE_COLORS, AI_SUMMARY_SETTING, APPROVAL_GATE_SETTING, type ActionColorConfig, BUILTIN_CONSTRAINT_IDS, BUILTIN_SKILLS, type BooleanSettingDef, type BuiltinConstraintId, CONSTRAINT_OVERRIDES_SETTING, CONTEXT_MANAGEMENT_SETTING, type ConstraintCheckType, type CustomSettingDef, DEFAULT_ACTION_COLOR_CONFIG, DEFAULT_ACTION_TYPE_COLOR, DEFAULT_COMMAND_TIMEOUT_SECS, DEFAULT_ELEMENT_TYPE_STYLE, DEFAULT_LAYOUT_OPTIONS, DEFAULT_WARNING_THRESHOLD, ELEMENT_TYPE_STYLES, ENFORCE_TOKEN_BUDGET_SETTING, type ElementTypeStyle, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, HTN_ENABLED_SETTING, HTN_STATE_MACHINE_PATH_SETTING, HTN_UI_BRIDGE_URL_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LayoutEdge, type LayoutNode, type LayoutOptions, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_OVERRIDE_PHASES, MODEL_PRESETS, MODEL_SETTING, type ModelOption, type ModelPreset, type NumberSettingDef, PER_PHASE_MODEL_SETTING, PIPELINE_CONFIG_SETTING, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type PathfindingAlgorithm, type ProviderOption, REFLECTION_MODE_SETTING, RESOLVED_MODEL_PREVIEW_SETTING, ROLLBACK_POLICY_SETTING, type ResolvedModelInfo, SKILL_CATEGORY_ICON_DATA, SMART_ROUTING_SENTINEL, STATE_COLORS, STATE_MACHINE_LAYOUT_OPTIONS, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, STRICT_CWD_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StateColor, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, TOOL_TAGS_SETTING, USE_WORKTREE_SETTING, type ValidationError, type VersionBumpType, WORKFLOW_ARCHITECTURE_SETTING, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, buildExportConfig, buildTransitionFromDrag, bumpVersion, calculateCompressionSavings, canStepExistInPhase, clearUserSkills, compareVersions, computeActionDuration, computeExportChecksum, computeSkillChecksum, computeSpatialLayout, constraintCheckTypeLabel, countElementsByType, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, deriveAction, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectPreset, detectWorkflowFeatures, findExistingTransition, findPath, findPathBFS, findPathDijkstra, findStatesWithElement, formatDuration, formatRelativeTime, formatTokenCount, generateConstraintId, generateConstraintToml, generateStepId, getAccentColors, getActionColorConfig, getActionColors, getActionTypeColor, getAllElementIds, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getConfidenceColor, getElementLabel, getElementTypePrefix, getElementTypeStyle, getGenerateModels, getGridLayoutedElements, getHookTriggerDisplayName, getLayoutedElements, getLogSourceValue, getNodeSizeTier, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillCategoryIconData, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, hasUpdate, instantiateComposition, instantiateSkill, isAiConstraint, isBuiltinConstraint, isCustomConstraint, isScheduledTaskRunning, isSelfLoop, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, parseVersion, registerUserSkills, resolveModelForPhase, searchSkills, severityBadgeColor, severityColor, severityLabel, toBooleanStoredValue, tomlString, tomlStringArray, validateDependencies, validateSkillParams, validateState, validateTransition };
+export { ACTION_ACTIVE_LABELS, ACTION_COLOR_CONFIG, ACTION_LABELS, ACTION_TYPE_COLORS, AI_SUMMARY_SETTING, APPROVAL_GATE_SETTING, type ActionColorConfig, BUILTIN_CONSTRAINT_IDS, BUILTIN_SKILLS, type BooleanSettingDef, type BuiltinConstraintId, CONSTRAINT_OVERRIDES_SETTING, CONTEXT_MANAGEMENT_SETTING, type Chunk, type ChunkEdge, type ChunkGraph, type ChunkKind, type ChunkStateMachineOptions, type ConstraintCheckType, type CustomSettingDef, DEFAULT_ACTION_COLOR_CONFIG, DEFAULT_ACTION_TYPE_COLOR, DEFAULT_COMMAND_TIMEOUT_SECS, DEFAULT_ELEMENT_TYPE_STYLE, DEFAULT_LAYOUT_OPTIONS, DEFAULT_WARNING_THRESHOLD, ELEMENT_TYPE_STYLES, ENFORCE_TOKEN_BUDGET_SETTING, type ElementTypeStyle, GENERATE_CLAUDE_MODELS, GENERATE_GEMINI_MODELS, GENERATE_PROVIDER_OPTIONS, GENERATE_SETTINGS_CONFIG, HEALTH_CHECK_SETTING, HEALTH_CHECK_URLS_SETTING, HTN_ENABLED_SETTING, HTN_STATE_MACHINE_PATH_SETTING, HTN_UI_BRIDGE_URL_SETTING, LOG_SOURCE_SETTING, LOG_WATCH_SETTING, type LayoutEdge, type LayoutNode, type LayoutOptions, type LogSourceSelection, MAX_ITERATIONS_SETTING, MODELS_BY_PROVIDER, MODEL_OVERRIDE_PHASES, MODEL_PRESETS, MODEL_SETTING, type ModelOption, type ModelPreset, type NumberSettingDef, PER_PHASE_MODEL_SETTING, PIPELINE_CONFIG_SETTING, PROMPT_TEMPLATE_SETTING, PROVIDER_OPTIONS, PROVIDER_SETTING, type PathfindingAlgorithm, type ProviderOption, REFLECTION_MODE_SETTING, RESOLVED_MODEL_PREVIEW_SETTING, ROLLBACK_POLICY_SETTING, type ResolvedModelInfo, SKILL_CATEGORY_ICON_DATA, SMART_ROUTING_SENTINEL, STATE_COLORS, STATE_MACHINE_LAYOUT_OPTIONS, STEP_ICON_DATA, STOP_ON_FAILURE_SETTING, STRICT_CWD_SETTING, type SelectSettingDef, type SettingDef, type SettingsSection, type SkillSearchFilters, type StateColor, type StepIconData, type StepValidationIssue, TEST_ICON_DATA, TIMEOUT_SETTING, TOOL_TAGS_SETTING, USE_WORKTREE_SETTING, type ValidationError, type VersionBumpType, WORKFLOW_ARCHITECTURE_SETTING, WORKFLOW_SETTINGS_CONFIG, autoNameFromMessage, buildExportConfig, buildTransitionFromDrag, bumpVersion, calculateCompressionSavings, canStepExistInPhase, chunkStateMachine, clearUserSkills, compareVersions, computeActionDuration, computeExportChecksum, computeSkillChecksum, computeSpatialLayout, constraintCheckTypeLabel, countElementsByType, createDefaultCompressionStatus, createDefaultExecutionStatus, createDefaultHookStatus, createDefaultRetryStatus, createDefaultRoutingStatus, createDefaultStep, createDefaultSubStepStatus, createDefaultWorkflow, createSummaryStep, deriveAction, describeConditions, describeCron, describeInterval, describeSchedule, describeTaskType, detectPreset, detectWorkflowFeatures, findExistingTransition, findPath, findPathBFS, findPathDijkstra, findStatesWithElement, formatDuration, formatRelativeTime, formatTokenCount, generateConstraintId, generateConstraintToml, generateStepId, getAccentColors, getActionColorConfig, getActionColors, getActionTypeColor, getAllElementIds, getAllSkills, getBooleanDisplayValue, getComplexityDisplayName, getConditionStatusText, getConfidenceColor, getElementLabel, getElementTypePrefix, getElementTypeStyle, getGenerateModels, getGridLayoutedElements, getHookTriggerDisplayName, getLayoutedElements, getLogSourceValue, getNodeSizeTier, getPhaseCount, getSchedulerStatusColor, getSeverityColors, getSkill, getSkillBySlug, getSkillCategories, getSkillCategoryIconData, getSkillsByCategory, getSkillsByPhase, getStatusColors, getStepIconData, getStepIconDataWithFallback, getStepPhase, getStepSubtitle, getStepValidationIssues, getTestIconData, getTimeUntilNextRun, getTotalStepCount, getVisibleSections, getVisibleSettings, hasCompletedSuccessfully, hasConditions, hasUpdate, instantiateComposition, instantiateSkill, isAiConstraint, isBuiltinConstraint, isCustomConstraint, isScheduledTaskRunning, isSelfLoop, isTaskComplete, isTaskFailed, isTaskFinished, isTaskRunning, isWaitingForConditions, isWorkflowEmpty, needsConfig, normalizeToPhases, parseLogSourceValue, parseOutputLog, parseVersion, registerUserSkills, resolveModelForPhase, searchSkills, severityBadgeColor, severityColor, severityLabel, toBooleanStoredValue, tomlString, tomlStringArray, validateDependencies, validateSkillParams, validateState, validateTransition };
