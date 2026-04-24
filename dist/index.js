@@ -3456,6 +3456,411 @@ function resolveInitialStateId(states, options) {
   return states.length > 0 ? states[0].state_id : null;
 }
 
+// src/state-machine/scc-secondary.ts
+function djb2Hash2(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (h << 5) + h + s.charCodeAt(i) | 0;
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+function deriveSubChunkId(stateIds) {
+  const sorted = stateIds.slice().sort();
+  return "subchunk_" + djb2Hash2(sorted.join(","));
+}
+function commonDashPrefix2(names) {
+  if (names.length === 0) return "";
+  const parts = names.map((n) => n.split("-"));
+  const first = parts[0];
+  let prefixLen = 0;
+  outer: for (let i = 0; i < first.length; i++) {
+    const seg = first[i];
+    for (let j = 1; j < parts.length; j++) {
+      if (parts[j][i] !== seg) break outer;
+    }
+    prefixLen++;
+  }
+  if (prefixLen === 0) return "";
+  const joined = first.slice(0, prefixLen).join("-");
+  return joined.length >= 2 ? joined : "";
+}
+function deriveSubChunkName(stateIds, nameById, branchHead) {
+  const names = stateIds.map((id) => nameById.get(id) ?? id);
+  if (names.length === 1) return names[0];
+  const prefix = commonDashPrefix2(names);
+  if (prefix) return `${prefix}-*`;
+  if (branchHead !== null) {
+    const headName = nameById.get(branchHead) ?? branchHead;
+    return `${headName} branch`;
+  }
+  return `${stateIds.length} states`;
+}
+function lengauerTarjanDominators(adj, radj, root, n) {
+  const dfnum = new Int32Array(n);
+  for (let i = 0; i < n; i++) dfnum[i] = -1;
+  const vertex = [];
+  const parent = new Int32Array(n);
+  for (let i = 0; i < n; i++) parent[i] = -1;
+  {
+    const stack = [];
+    dfnum[root] = 0;
+    vertex.push(root);
+    stack.push({ v: root, iter: 0 });
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const v = frame.v;
+      const succ = adj[v];
+      if (frame.iter < succ.length) {
+        const w = succ[frame.iter];
+        frame.iter++;
+        if (dfnum[w] === -1) {
+          dfnum[w] = vertex.length;
+          vertex.push(w);
+          parent[w] = v;
+          stack.push({ v: w, iter: 0 });
+        }
+      } else {
+        stack.pop();
+      }
+    }
+  }
+  const reachedCount = vertex.length;
+  const semi = new Int32Array(n);
+  for (let i = 0; i < n; i++) semi[i] = dfnum[i];
+  const ancestor = new Int32Array(n);
+  const label = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    ancestor[i] = -1;
+    label[i] = i;
+  }
+  const bucket = Array.from({ length: n }, () => []);
+  const idom = new Int32Array(n);
+  for (let i = 0; i < n; i++) idom[i] = -1;
+  function evalNode(v) {
+    if (ancestor[v] === -1) return v;
+    const chain = [];
+    let u = v;
+    while (ancestor[u] !== -1 && ancestor[ancestor[u]] !== -1) {
+      chain.push(u);
+      u = ancestor[u];
+    }
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const x = chain[i];
+      const a = ancestor[x];
+      if (semi[label[a]] < semi[label[x]]) {
+        label[x] = label[a];
+      }
+      ancestor[x] = ancestor[a];
+    }
+    return label[v];
+  }
+  function linkNodes(v, w) {
+    ancestor[w] = v;
+  }
+  for (let i = reachedCount - 1; i >= 1; i--) {
+    const w = vertex[i];
+    const preds = radj[w];
+    for (const v of preds) {
+      if (dfnum[v] === -1) continue;
+      const u = evalNode(v);
+      if (semi[u] < semi[w]) {
+        semi[w] = semi[u];
+      }
+    }
+    bucket[vertex[semi[w]]].push(w);
+    linkNodes(parent[w], w);
+    const p = parent[w];
+    const pb = bucket[p];
+    for (const v of pb) {
+      const u = evalNode(v);
+      idom[v] = semi[u] < semi[v] ? u : p;
+    }
+    pb.length = 0;
+  }
+  for (let i = 1; i < reachedCount; i++) {
+    const w = vertex[i];
+    if (idom[w] !== vertex[semi[w]]) {
+      idom[w] = idom[idom[w]];
+    }
+  }
+  idom[root] = root;
+  return idom;
+}
+function findUndirectedBridges(uadj, n) {
+  const disc = new Int32Array(n);
+  const low = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    disc[i] = -1;
+    low[i] = -1;
+  }
+  const bridges = /* @__PURE__ */ new Set();
+  let timer = 0;
+  for (let start = 0; start < n; start++) {
+    if (disc[start] !== -1) continue;
+    disc[start] = timer;
+    low[start] = timer;
+    timer++;
+    const stack = [{ u: start, parent: -1, iter: 0 }];
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const u = frame.u;
+      const neighbors = uadj[u];
+      if (frame.iter < neighbors.length) {
+        const v = neighbors[frame.iter];
+        frame.iter++;
+        if (disc[v] === -1) {
+          disc[v] = timer;
+          low[v] = timer;
+          timer++;
+          stack.push({ u: v, parent: u, iter: 0 });
+        } else if (v !== frame.parent) {
+          if (disc[v] < low[u]) low[u] = disc[v];
+        }
+      } else {
+        stack.pop();
+        if (stack.length > 0) {
+          const parent = stack[stack.length - 1].u;
+          if (low[u] < low[parent]) low[parent] = low[u];
+          if (low[u] > disc[parent]) {
+            const a = parent < u ? parent : u;
+            const b = parent < u ? u : parent;
+            bridges.add(a + "|" + b);
+          }
+        }
+      }
+    }
+  }
+  return bridges;
+}
+function decomposeGiantSCC(states, transitions, scc, options = {}) {
+  const subChunkMax = options.subChunkMax ?? 40;
+  const maxDepth = options.maxDepth ?? 2;
+  return decomposeGiantSCCInternal(
+    states,
+    transitions,
+    scc,
+    options.rootStateId ?? null,
+    subChunkMax,
+    maxDepth
+  );
+}
+function decomposeGiantSCCInternal(states, transitions, scc, rootStateIdHint, subChunkMax, remainingDepth) {
+  const sccIds = scc.stateIds;
+  const n = sccIds.length;
+  const idToIndex = /* @__PURE__ */ new Map();
+  const nameById = /* @__PURE__ */ new Map();
+  for (let i = 0; i < n; i++) {
+    idToIndex.set(sccIds[i], i);
+  }
+  const sccIdSet = new Set(sccIds);
+  for (const s of states) {
+    if (sccIdSet.has(s.state_id)) nameById.set(s.state_id, s.name);
+  }
+  const adjSets = Array.from({ length: n }, () => /* @__PURE__ */ new Set());
+  const radjSets = Array.from({ length: n }, () => /* @__PURE__ */ new Set());
+  const uadjSets = Array.from({ length: n }, () => /* @__PURE__ */ new Set());
+  const undirectedEdgeTransitions = /* @__PURE__ */ new Map();
+  for (const t of transitions) {
+    for (const from of t.from_states) {
+      const u = idToIndex.get(from);
+      if (u === void 0) continue;
+      for (const to of t.activate_states) {
+        const v = idToIndex.get(to);
+        if (v === void 0) continue;
+        adjSets[u].add(v);
+        radjSets[v].add(u);
+        if (u !== v) {
+          uadjSets[u].add(v);
+          uadjSets[v].add(u);
+          const a = u < v ? u : v;
+          const b = u < v ? v : u;
+          const key = a + "|" + b;
+          let set = undirectedEdgeTransitions.get(key);
+          if (!set) {
+            set = /* @__PURE__ */ new Set();
+            undirectedEdgeTransitions.set(key, set);
+          }
+          set.add(t.transition_id);
+        }
+      }
+    }
+  }
+  const adj = adjSets.map((s) => Array.from(s).sort((a, b) => a - b));
+  const radj = radjSets.map((s) => Array.from(s).sort((a, b) => a - b));
+  const uadj = uadjSets.map((s) => Array.from(s).sort((a, b) => a - b));
+  let rootIdx = -1;
+  if (rootStateIdHint !== null) {
+    const idx = idToIndex.get(rootStateIdHint);
+    if (idx !== void 0) rootIdx = idx;
+  }
+  if (rootIdx === -1) {
+    let bestInDeg = -1;
+    let bestSid = null;
+    for (let i = 0; i < n; i++) {
+      const inDeg = radj[i].length;
+      const sid = sccIds[i];
+      if (inDeg > bestInDeg || inDeg === bestInDeg && (bestSid === null || sid < bestSid)) {
+        bestInDeg = inDeg;
+        bestSid = sid;
+        rootIdx = i;
+      }
+    }
+  }
+  if (rootIdx === -1) {
+    return {
+      subChunks: [],
+      edges: [],
+      stateIndex: /* @__PURE__ */ new Map(),
+      weakBridgeTransitionIds: /* @__PURE__ */ new Set(),
+      method: "dominator",
+      degenerate: true
+    };
+  }
+  const idom = lengauerTarjanDominators(adj, radj, rootIdx, n);
+  const domChildren = Array.from({ length: n }, () => []);
+  for (let v = 0; v < n; v++) {
+    if (v === rootIdx) continue;
+    const p = idom[v];
+    if (p === -1) continue;
+    domChildren[p].push(v);
+  }
+  for (let v = 0; v < n; v++) {
+    domChildren[v].sort((a, b) => {
+      const sa = sccIds[a];
+      const sb = sccIds[b];
+      return sa < sb ? -1 : sa > sb ? 1 : 0;
+    });
+  }
+  function collectDomSubtree(start) {
+    const out = [];
+    const queue = [start];
+    while (queue.length > 0) {
+      const v = queue.shift();
+      out.push(v);
+      for (const c of domChildren[v]) queue.push(c);
+    }
+    return out;
+  }
+  const branches = [];
+  for (const c of domChildren[rootIdx]) {
+    branches.push({ head: c, indices: collectDomSubtree(c) });
+  }
+  const reachedSet = /* @__PURE__ */ new Set();
+  reachedSet.add(rootIdx);
+  for (const b of branches) for (const v of b.indices) reachedSet.add(v);
+  const unreached = [];
+  for (let i = 0; i < n; i++) if (!reachedSet.has(i)) unreached.push(i);
+  const subChunks = [];
+  const stateIndex = /* @__PURE__ */ new Map();
+  function emitSubChunk(indices, branchHead) {
+    const stateIds = indices.map((i) => sccIds[i]);
+    const id = deriveSubChunkId(stateIds);
+    const kind = stateIds.length === 1 ? "chain" : "scc";
+    const headId = branchHead !== null ? sccIds[branchHead] : null;
+    const name = deriveSubChunkName(stateIds, nameById, headId);
+    const chunk = {
+      id,
+      kind,
+      stateIds,
+      name,
+      containsInitialState: false
+    };
+    subChunks.push(chunk);
+    for (const sid of stateIds) stateIndex.set(sid, id);
+    return id;
+  }
+  if (n >= 1) {
+    emitSubChunk([rootIdx], null);
+  }
+  for (const b of branches) {
+    if (b.indices.length <= subChunkMax || remainingDepth <= 0) {
+      emitSubChunk(b.indices, b.head);
+      continue;
+    }
+    const branchStateIds = b.indices.map((i) => sccIds[i]);
+    const branchId = "scc_branch_" + djb2Hash2(branchStateIds.slice().sort().join(","));
+    const syntheticChunk = {
+      id: branchId,
+      kind: "scc",
+      stateIds: branchStateIds,
+      name: nameById.get(sccIds[b.head]) ?? sccIds[b.head],
+      containsInitialState: false
+    };
+    const inner = decomposeGiantSCCInternal(
+      states,
+      transitions,
+      syntheticChunk,
+      sccIds[b.head],
+      // prefer branch head as inner root
+      subChunkMax,
+      remainingDepth - 1
+    );
+    if (inner.degenerate) {
+      emitSubChunk(b.indices, b.head);
+    } else {
+      for (const sub of inner.subChunks) {
+        subChunks.push(sub);
+        for (const sid of sub.stateIds) stateIndex.set(sid, sub.id);
+      }
+    }
+  }
+  if (unreached.length > 0) {
+    emitSubChunk(unreached, null);
+  }
+  const edgeMap = /* @__PURE__ */ new Map();
+  const edgeOrder = [];
+  for (const t of transitions) {
+    for (const from of t.from_states) {
+      const u = idToIndex.get(from);
+      if (u === void 0) continue;
+      const fromSub = stateIndex.get(from);
+      if (fromSub === void 0) continue;
+      for (const to of t.activate_states) {
+        const v = idToIndex.get(to);
+        if (v === void 0) continue;
+        const toSub = stateIndex.get(to);
+        if (toSub === void 0) continue;
+        if (fromSub === toSub) continue;
+        const key = fromSub + " " + toSub;
+        let agg = edgeMap.get(key);
+        if (!agg) {
+          agg = { transitionIds: /* @__PURE__ */ new Set(), transitionIdOrder: [] };
+          edgeMap.set(key, agg);
+          edgeOrder.push({ from: fromSub, to: toSub, key });
+        }
+        if (!agg.transitionIds.has(t.transition_id)) {
+          agg.transitionIds.add(t.transition_id);
+          agg.transitionIdOrder.push(t.transition_id);
+        }
+      }
+    }
+  }
+  const edges = edgeOrder.map(({ from, to, key }) => {
+    const agg = edgeMap.get(key);
+    return {
+      from,
+      to,
+      transitionCount: agg.transitionIds.size,
+      transitionIds: agg.transitionIdOrder
+    };
+  });
+  const bridgeKeys = findUndirectedBridges(uadj, n);
+  const weakBridgeTransitionIds = /* @__PURE__ */ new Set();
+  for (const key of bridgeKeys) {
+    const ids = undirectedEdgeTransitions.get(key);
+    if (!ids) continue;
+    for (const id of ids) weakBridgeTransitionIds.add(id);
+  }
+  return {
+    subChunks,
+    edges,
+    stateIndex,
+    weakBridgeTransitionIds,
+    method: "dominator",
+    degenerate: subChunks.length <= 1
+  };
+}
+
 // src/constraint-utils.ts
 var BUILTIN_CONSTRAINT_IDS = [
   "builtin:no-secrets",
@@ -3695,6 +4100,7 @@ export {
   createDefaultSubStepStatus,
   createDefaultWorkflow,
   createSummaryStep,
+  decomposeGiantSCC,
   deriveAction,
   describeConditions,
   describeCron,

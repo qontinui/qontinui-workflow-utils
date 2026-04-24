@@ -10,3 +10,4 @@ export * from "./pathfinding";
 export * from "./validation";
 export * from "./export";
 export * from "./scc";
+export * from "./scc-secondary";
