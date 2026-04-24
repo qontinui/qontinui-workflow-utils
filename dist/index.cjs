@@ -112,6 +112,7 @@ __export(index_exports, {
   findPathBFS: () => findPathBFS,
   findPathDijkstra: () => findPathDijkstra,
   findStatesWithElement: () => findStatesWithElement,
+  firstActionTargetString: () => firstActionTargetString,
   formatDuration: () => formatDuration,
   formatRelativeTime: () => formatRelativeTime,
   formatTokenCount: () => formatTokenCount,
@@ -2724,6 +2725,11 @@ function hasUpdate(localSkill, remoteSkill) {
 }
 
 // src/state-machine/graph-layout.ts
+function firstActionTargetString(action) {
+  if (typeof action?.target === "string") return action.target;
+  if (typeof action?.url === "string") return action.url;
+  return void 0;
+}
 var DEFAULT_LAYOUT_OPTIONS = {
   direction: "TB",
   nodeWidth: 200,
@@ -3900,6 +3906,7 @@ function appendCheckToml(lines, check) {
   findPathBFS,
   findPathDijkstra,
   findStatesWithElement,
+  firstActionTargetString,
   formatDuration,
   formatRelativeTime,
   formatTokenCount,

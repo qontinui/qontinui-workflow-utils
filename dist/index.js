@@ -2528,6 +2528,11 @@ function hasUpdate(localSkill, remoteSkill) {
 }
 
 // src/state-machine/graph-layout.ts
+function firstActionTargetString(action) {
+  if (typeof action?.target === "string") return action.target;
+  if (typeof action?.url === "string") return action.url;
+  return void 0;
+}
 var DEFAULT_LAYOUT_OPTIONS = {
   direction: "TB",
   nodeWidth: 200,
@@ -3703,6 +3708,7 @@ export {
   findPathBFS,
   findPathDijkstra,
   findStatesWithElement,
+  firstActionTargetString,
   formatDuration,
   formatRelativeTime,
   formatTokenCount,

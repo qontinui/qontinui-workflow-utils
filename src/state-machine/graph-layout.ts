@@ -5,6 +5,27 @@
  * for ReactFlow state machine visualization.
  */
 
+import type { TransitionAction } from "@qontinui/shared-types";
+
+// =============================================================================
+// Edge-data coercion
+// =============================================================================
+
+/**
+ * Pick a renderable string for the first action's target, falling back to its
+ * url field. Some persisted action payloads store `target` as a recognition
+ * object (e.g. `{ text: "Abort" }`) instead of the `string | null` the schema
+ * declares. Rendering an object as a React child throws React #31, so coerce
+ * at the data-prep step.
+ */
+export function firstActionTargetString(
+  action: TransitionAction | undefined,
+): string | undefined {
+  if (typeof action?.target === "string") return action.target;
+  if (typeof action?.url === "string") return action.url;
+  return undefined;
+}
+
 // =============================================================================
 // Layout Configuration
 // =============================================================================
