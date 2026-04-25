@@ -718,12 +718,10 @@ function decomposeGiantSCCInternal(
   // ---------------------------------------------------------------------------
   // Weak-bridge detection on the sub-graph's undirected skeleton.
   //
-  // We run this at the TOP level only (remainingDepth == initial depth);
-  // recursed calls also compute their own bridges on their own sub-graphs,
-  // but we don't currently merge those back — the set only ever holds
-  // bridges structural at this level. That's the right semantic: a bridge
-  // at the outer level is still a bridge there, and the UI accent only
-  // needs the single set.
+  // Bridge detection runs at every recursion level. Recursive calls also
+  // compute their own bridges on their own sub-graphs, but inner results are
+  // not merged back — the returned set only holds bridges at this level.
+  // Sub-graph bridges remain invisible to the outer caller.
   // ---------------------------------------------------------------------------
   const bridgeKeys = findUndirectedBridges(uadj, n);
   const weakBridgeTransitionIds = new Set<string>();

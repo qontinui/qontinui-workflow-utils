@@ -329,6 +329,8 @@ export function getElementLabel(elementId: string): string {
  */
 export const ACTION_LABELS: Record<string, string> = {
   click: "Click",
+  doubleClick: "Double Click",
+  rightClick: "Right Click",
   type: "Type",
   select: "Select",
   wait: "Wait",
@@ -340,6 +342,8 @@ export const ACTION_LABELS: Record<string, string> = {
  */
 export const ACTION_ACTIVE_LABELS: Record<string, string> = {
   click: "Clicking...",
+  doubleClick: "Double clicking...",
+  rightClick: "Right clicking...",
   type: "Typing...",
   select: "Selecting...",
   wait: "Waiting...",
@@ -357,6 +361,16 @@ export interface ActionColorConfig {
 
 export const ACTION_COLOR_CONFIG: Record<string, ActionColorConfig> = {
   click: {
+    text: "text-blue-400",
+    bg: "bg-blue-500/15",
+    border: "border-blue-500/30",
+  },
+  doubleClick: {
+    text: "text-blue-400",
+    bg: "bg-blue-500/15",
+    border: "border-blue-500/30",
+  },
+  rightClick: {
     text: "text-blue-400",
     bg: "bg-blue-500/15",
     border: "border-blue-500/30",
