@@ -905,12 +905,31 @@ interface DecomposeGiantSCCOptions {
     rootStateId?: string | null;
     /** Default: 40. Sub-chunks larger than this are recursively decomposed. */
     subChunkMax?: number;
-    /** Default: 2. Caps recursion depth to prevent deep nesting. */
-    maxDepth?: number;
 }
 /**
  * Decompose a giant SCC into secondary sub-chunks using dominator-tree
  * partitioning, with Tarjan's bridge detection for UI annotation.
+ *
+ * Termination is bounded by two algorithmic guards (no depth cap):
+ *
+ *   1. **Base case**: if the input fits under `subChunkMax`, the function
+ *      returns `degenerate: true` immediately (no decomposition needed —
+ *      the caller treats the whole region as one leaf chunk).
+ *   2. **Post-recursion progress check**: after recursing into an oversized
+ *      branch, the inner result is accepted only if its largest sub-chunk
+ *      is strictly smaller than the branch we recursed on. Otherwise the
+ *      recursion is treated as wasted and the branch stays as one big leaf.
+ *
+ * Together these prevent infinite recursion and bound work to O(n²) in the
+ * worst case (slow-shrinkage chain n → n−1 → n−2 → …), which terminates
+ * naturally as soon as a sub-chunk fits under `subChunkMax`. For realistic
+ * state-machine graphs (≤ ~1000 states per SCC) decomposition typically
+ * terminates in 2–3 levels because dominator subtrees roughly halve.
+ *
+ * Note that a single "tall and narrow" dominator step (root → only-child →
+ * many-grandchildren) is handled correctly: Guard 2 lets the recursion
+ * descend through the narrow waist before checking for progress, so the
+ * grandchildren level still gets its chance to fan out.
  */
 declare function decomposeGiantSCC(states: StateMachineState[], transitions: StateMachineTransition[], scc: Chunk, options?: DecomposeGiantSCCOptions): SecondaryChunkGraph;
 

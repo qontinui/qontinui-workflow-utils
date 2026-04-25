@@ -3634,19 +3634,27 @@ function findUndirectedBridges(uadj, n) {
 }
 function decomposeGiantSCC(states, transitions, scc, options = {}) {
   const subChunkMax = options.subChunkMax ?? 40;
-  const maxDepth = options.maxDepth ?? 2;
   return decomposeGiantSCCInternal(
     states,
     transitions,
     scc,
     options.rootStateId ?? null,
-    subChunkMax,
-    maxDepth
+    subChunkMax
   );
 }
-function decomposeGiantSCCInternal(states, transitions, scc, rootStateIdHint, subChunkMax, remainingDepth) {
+function decomposeGiantSCCInternal(states, transitions, scc, rootStateIdHint, subChunkMax) {
   const sccIds = scc.stateIds;
   const n = sccIds.length;
+  if (n <= subChunkMax) {
+    return {
+      subChunks: [],
+      edges: [],
+      stateIndex: /* @__PURE__ */ new Map(),
+      weakBridgeTransitionIds: /* @__PURE__ */ new Set(),
+      method: "dominator",
+      degenerate: true
+    };
+  }
   const idToIndex = /* @__PURE__ */ new Map();
   const nameById = /* @__PURE__ */ new Map();
   for (let i = 0; i < n; i++) {
@@ -3773,7 +3781,7 @@ function decomposeGiantSCCInternal(states, transitions, scc, rootStateIdHint, su
     emitSubChunk([rootIdx], null);
   }
   for (const b of branches) {
-    if (b.indices.length <= subChunkMax || remainingDepth <= 0) {
+    if (b.indices.length <= subChunkMax) {
       emitSubChunk(b.indices, b.head);
       continue;
     }
@@ -3792,10 +3800,19 @@ function decomposeGiantSCCInternal(states, transitions, scc, rootStateIdHint, su
       syntheticChunk,
       sccIds[b.head],
       // prefer branch head as inner root
-      subChunkMax,
-      remainingDepth - 1
+      subChunkMax
     );
-    if (inner.degenerate) {
+    let innerMadeProgress = !inner.degenerate;
+    if (innerMadeProgress) {
+      let maxInnerSize = 0;
+      for (const sc of inner.subChunks) {
+        if (sc.stateIds.length > maxInnerSize) maxInnerSize = sc.stateIds.length;
+      }
+      if (maxInnerSize >= b.indices.length) {
+        innerMadeProgress = false;
+      }
+    }
+    if (!innerMadeProgress) {
       emitSubChunk(b.indices, b.head);
     } else {
       for (const sub of inner.subChunks) {

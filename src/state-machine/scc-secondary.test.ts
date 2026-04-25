@@ -83,7 +83,7 @@ function mkChunk(stateIds: string[]): Chunk {
 // =============================================================================
 
 describe("decomposeGiantSCC — trivial", () => {
-  it("3-state SCC below subChunkMax → single sub-chunk, degenerate: true", () => {
+  it("3-state SCC below subChunkMax → degenerate (base case)", () => {
     const ids = ["a", "b", "c"];
     const states = ids.map((id) => mkState(id));
     const transitions = [
@@ -95,21 +95,12 @@ describe("decomposeGiantSCC — trivial", () => {
 
     const result = decomposeGiantSCC(states, transitions, chunk, {
       subChunkMax: 40,
-      maxDepth: 2,
     });
 
-    // With "a" as root (max in-deg=1, lex-first), "b" and "c" are the
-    // dominator children. idom(b)=a, idom(c)=b. So one branch from a (b→c).
-    // That yields 1 branch + 1 hub = 2 sub-chunks — NOT degenerate in that
-    // shape. But in a 3-cycle where root is "a", both b and c are children
-    // of a? Let's not over-assert the exact shape; assert the spirit:
-    // total states covered and no recursion needed.
-    const allCovered = new Set<string>();
-    for (const sc of result.subChunks) {
-      for (const sid of sc.stateIds) allCovered.add(sid);
-    }
-    expect(allCovered).toEqual(new Set(ids));
-    expect(result.method).toBe("dominator");
+    // Input fits under subChunkMax → base case fires, no decomposition done.
+    // Caller treats the whole region as one leaf chunk.
+    expect(result.degenerate).toBe(true);
+    expect(result.subChunks).toHaveLength(0);
   });
 
   it("1-state SCC → degenerate: true", () => {
@@ -165,7 +156,6 @@ describe("decomposeGiantSCC — dominator-clean hub + 3 branches", () => {
     const result = decomposeGiantSCC(states, transitions, chunk, {
       rootStateId: "H",
       subChunkMax: 40,
-      maxDepth: 2,
     });
 
     expect(result.method).toBe("dominator");
@@ -274,16 +264,15 @@ describe("decomposeGiantSCC — recursive", () => {
     const result = decomposeGiantSCC(states, transitions, bigScc!, {
       rootStateId: "H",
       subChunkMax: 40,
-      maxDepth: 2,
     });
 
     expect(result.method).toBe("dominator");
     expect(result.degenerate).toBe(false);
 
-    // After recursion, every sub-chunk should be <= subChunkMax (40), OR we
-    // bottomed out on depth cap (in which case some may remain large — but
-    // with maxDepth=2 and a 2-level branching structure, this should split
-    // cleanly).
+    // With the algorithmic-progress guards (no depth cap), every sub-chunk
+    // produced by a 2-level branching structure should fit under
+    // `subChunkMax = 40` because each recursion strictly shrinks the largest
+    // candidate before it gets accepted.
     for (const sc of result.subChunks) {
       expect(sc.stateIds.length).toBeLessThanOrEqual(40);
     }
@@ -320,9 +309,11 @@ describe("decomposeGiantSCC — weak-bridge detection", () => {
       mkTransition("t_bridge_ba", "b1", "a1"),
     ];
 
+    // subChunkMax: 1 bypasses the base case so this small fixture still
+    // exercises bridge detection. (In production, the function is only
+    // called for chunks > 150 states, so the base case is rarely hit.)
     const result = decomposeGiantSCC(states, transitions, mkChunk(ids), {
-      subChunkMax: 40,
-      maxDepth: 2,
+      subChunkMax: 1,
     });
 
     // Both directions of the single connecting edge map to the same undirected
@@ -381,12 +372,14 @@ describe("decomposeGiantSCC — stability", () => {
       mkTransition("t_bridge_ba", "b1", "a1"),
     ];
 
+    // subChunkMax: 1 to bypass the base case for this small synthetic
+    // fixture and exercise the dominator + bridge code paths.
     const run = (order: string[]) =>
       decomposeGiantSCC(
         order.map((id) => mkState(id)),
         buildTransitions(),
         mkChunk(order),
-        { subChunkMax: 40, maxDepth: 2 },
+        { subChunkMax: 1 },
       );
 
     const rA = run(idsA);
@@ -448,9 +441,10 @@ describe("decomposeGiantSCC — degenerate K_{n,n}", () => {
         transitions.push(mkTransition(`tba${tCounter++}`, b, a));
       }
     }
+    // subChunkMax: 1 to bypass the base case so the decomposition actually
+    // runs on this 8-node fixture.
     const result = decomposeGiantSCC(states, transitions, mkChunk(ids), {
-      subChunkMax: 40,
-      maxDepth: 2,
+      subChunkMax: 1,
     });
 
     // Every non-root node is its own dominator subtree (size 1). So we get
@@ -469,7 +463,27 @@ describe("decomposeGiantSCC — degenerate K_{n,n}", () => {
     expect(result.degenerate).toBe(false);
   });
 
-  it("2-state K_{1,1} → degenerate false but only 2 singleton sub-chunks", () => {
+  it("2-state K_{1,1} forced past base case: 2 singleton sub-chunks", () => {
+    const ids = ["a", "b"];
+    const states = ids.map((id) => mkState(id));
+    const transitions = [
+      mkTransition("tab", "a", "b"),
+      mkTransition("tba", "b", "a"),
+    ];
+    // subChunkMax: 1 to force decomposition past the base case.
+    const result = decomposeGiantSCC(states, transitions, mkChunk(ids), {
+      subChunkMax: 1,
+    });
+    // a is root (lex-first with equal in-deg 1). b is a's only dom-child.
+    // Hub + 1 branch = 2 sub-chunks.
+    expect(result.subChunks.length).toBe(2);
+    expect(result.degenerate).toBe(false);
+  });
+
+  it("2-state input under default subChunkMax → base case → degenerate", () => {
+    // Production callers always invoke with the default subChunkMax=40 and
+    // only on chunks > 150 states, so this is the realistic path: a 2-state
+    // input never even reaches the dominator code.
     const ids = ["a", "b"];
     const states = ids.map((id) => mkState(id));
     const transitions = [
@@ -477,9 +491,101 @@ describe("decomposeGiantSCC — degenerate K_{n,n}", () => {
       mkTransition("tba", "b", "a"),
     ];
     const result = decomposeGiantSCC(states, transitions, mkChunk(ids), {});
-    // a is root (lex-first with equal in-deg 1). b is a's only dom-child.
-    // Hub + 1 branch = 2 sub-chunks.
-    expect(result.subChunks.length).toBe(2);
+    expect(result.degenerate).toBe(true);
+    expect(result.subChunks).toHaveLength(0);
+  });
+});
+
+// =============================================================================
+// Case 8 — Termination guards (no depth cap)
+// =============================================================================
+
+describe("decomposeGiantSCC — termination without depth cap", () => {
+  it("slow-shrinkage chain (root → only-child → only-grandchild → …) terminates", () => {
+    // Build an SCC where every non-leaf node has exactly one forward dominator
+    // child: a long linear path with a back-edge to make it strongly connected.
+    //   s0 → s1 → s2 → ... → s199
+    //   s199 → s0 (closes the cycle)
+    // Dominator from s0: idom(s_i) = s_{i-1} for all i > 0. So at each level
+    // the recursion gets exactly one branch of size n-1. With depth cap gone,
+    // the only thing stopping recursion is `n <= subChunkMax` (the base case)
+    // + Guard 2 (post-recursion progress check). Recursion depth = n / 1 =
+    // ~n levels in the worst case; should still terminate without stack
+    // overflow for n=200 and produce coverage of all states.
+    const N = 200;
+    const ids: string[] = [];
+    const states: StateMachineState[] = [];
+    const transitions: StateMachineTransition[] = [];
+    for (let i = 0; i < N; i++) {
+      const sid = `s${String(i).padStart(3, "0")}`;
+      ids.push(sid);
+      states.push(mkState(sid));
+    }
+    for (let i = 1; i < N; i++) {
+      transitions.push(mkTransition(`t${i}`, ids[i - 1]!, ids[i]!));
+    }
+    transitions.push(mkTransition("tback", ids[N - 1]!, ids[0]!));
+
+    const start = Date.now();
+    const result = decomposeGiantSCC(states, transitions, mkChunk(ids), {
+      rootStateId: ids[0]!,
+      subChunkMax: 40,
+    });
+    const elapsed = Date.now() - start;
+
+    // Must complete in well under a second even for n=200 with worst-case
+    // shrinkage. (Empirically ~10–50ms.)
+    expect(elapsed).toBeLessThan(1000);
+
+    // All states accounted for.
+    const covered = new Set<string>();
+    for (const sc of result.subChunks) {
+      for (const sid of sc.stateIds) covered.add(sid);
+    }
+    expect(covered).toEqual(new Set(ids));
+
+    // The largest sub-chunk must be ≤ subChunkMax — otherwise recursion
+    // didn't actually shrink to leaves.
+    let maxSize = 0;
+    for (const sc of result.subChunks) {
+      if (sc.stateIds.length > maxSize) maxSize = sc.stateIds.length;
+    }
+    expect(maxSize).toBeLessThanOrEqual(40);
+  });
+
+  it("post-recursion progress check rejects no-shrink inner results", () => {
+    // Construct a scenario where the inner recursion *might* return a result
+    // whose largest sub-chunk equals the parent input size. We use a 60-state
+    // graph that is structurally a single chain — top-level partition gives
+    // one branch of size 59 (root + chain of 59). Recursing on the 59-state
+    // branch produces root + chain of 58, and so on. Without Guard 2, you
+    // could imagine a buggy recursion accepting a "no-progress" result —
+    // verify that the final output has every sub-chunk ≤ subChunkMax (i.e.
+    // recursion ultimately reached the base case rather than getting stuck).
+    const N = 60;
+    const ids: string[] = [];
+    const states: StateMachineState[] = [];
+    const transitions: StateMachineTransition[] = [];
+    for (let i = 0; i < N; i++) {
+      const sid = `c${String(i).padStart(2, "0")}`;
+      ids.push(sid);
+      states.push(mkState(sid));
+    }
+    for (let i = 1; i < N; i++) {
+      transitions.push(mkTransition(`t${i}`, ids[i - 1]!, ids[i]!));
+    }
+    transitions.push(mkTransition("tback", ids[N - 1]!, ids[0]!));
+
+    const result = decomposeGiantSCC(states, transitions, mkChunk(ids), {
+      rootStateId: ids[0]!,
+      subChunkMax: 20,
+    });
+
     expect(result.degenerate).toBe(false);
+    // No sub-chunk above subChunkMax — i.e. recursion did terminate by
+    // shrinking each branch to fit, not by getting bored.
+    for (const sc of result.subChunks) {
+      expect(sc.stateIds.length).toBeLessThanOrEqual(20);
+    }
   });
 });

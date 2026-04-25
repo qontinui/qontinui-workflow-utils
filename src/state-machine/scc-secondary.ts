@@ -54,8 +54,6 @@ export interface DecomposeGiantSCCOptions {
   rootStateId?: string | null;
   /** Default: 40. Sub-chunks larger than this are recursively decomposed. */
   subChunkMax?: number;
-  /** Default: 2. Caps recursion depth to prevent deep nesting. */
-  maxDepth?: number;
 }
 
 // =============================================================================
@@ -354,6 +352,27 @@ function findUndirectedBridges(
 /**
  * Decompose a giant SCC into secondary sub-chunks using dominator-tree
  * partitioning, with Tarjan's bridge detection for UI annotation.
+ *
+ * Termination is bounded by two algorithmic guards (no depth cap):
+ *
+ *   1. **Base case**: if the input fits under `subChunkMax`, the function
+ *      returns `degenerate: true` immediately (no decomposition needed —
+ *      the caller treats the whole region as one leaf chunk).
+ *   2. **Post-recursion progress check**: after recursing into an oversized
+ *      branch, the inner result is accepted only if its largest sub-chunk
+ *      is strictly smaller than the branch we recursed on. Otherwise the
+ *      recursion is treated as wasted and the branch stays as one big leaf.
+ *
+ * Together these prevent infinite recursion and bound work to O(n²) in the
+ * worst case (slow-shrinkage chain n → n−1 → n−2 → …), which terminates
+ * naturally as soon as a sub-chunk fits under `subChunkMax`. For realistic
+ * state-machine graphs (≤ ~1000 states per SCC) decomposition typically
+ * terminates in 2–3 levels because dominator subtrees roughly halve.
+ *
+ * Note that a single "tall and narrow" dominator step (root → only-child →
+ * many-grandchildren) is handled correctly: Guard 2 lets the recursion
+ * descend through the narrow waist before checking for progress, so the
+ * grandchildren level still gets its chance to fan out.
  */
 export function decomposeGiantSCC(
   states: StateMachineState[],
@@ -362,34 +381,50 @@ export function decomposeGiantSCC(
   options: DecomposeGiantSCCOptions = {},
 ): SecondaryChunkGraph {
   const subChunkMax = options.subChunkMax ?? 40;
-  const maxDepth = options.maxDepth ?? 2;
   return decomposeGiantSCCInternal(
     states,
     transitions,
     scc,
     options.rootStateId ?? null,
     subChunkMax,
-    maxDepth,
   );
 }
 
-/**
- * Internal recursive worker. `remainingDepth` decrements on recursion; when it
- * reaches 0 we stop splitting oversized branches further.
- */
+/** Internal recursive worker. Termination is enforced by progress guards
+ *  (see `decomposeGiantSCC` doc); no depth counter. */
 function decomposeGiantSCCInternal(
   states: StateMachineState[],
   transitions: StateMachineTransition[],
   scc: Chunk,
   rootStateIdHint: string | null,
   subChunkMax: number,
-  remainingDepth: number,
 ): SecondaryChunkGraph {
+  const sccIds = scc.stateIds;
+  const n = sccIds.length;
+
+  // ---------------------------------------------------------------------------
+  // BASE CASE — input fits under subChunkMax.
+  //
+  // No further decomposition needed. Return degenerate so the caller emits
+  // the whole region as one leaf chunk. (For the top-level entry point this
+  // is rare in practice — `ChunkedGraphView` only calls `decomposeGiantSCC`
+  // when the chunk is above CHUNK_MAX_NODES > subChunkMax — but recursive
+  // calls hit this path naturally as the dominant termination condition.)
+  // ---------------------------------------------------------------------------
+  if (n <= subChunkMax) {
+    return {
+      subChunks: [],
+      edges: [],
+      stateIndex: new Map(),
+      weakBridgeTransitionIds: new Set(),
+      method: "dominator",
+      degenerate: true,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Build the restricted sub-graph over scc.stateIds.
   // ---------------------------------------------------------------------------
-  const sccIds = scc.stateIds;
-  const n = sccIds.length;
   const idToIndex = new Map<string, number>();
   const nameById = new Map<string, string>();
   for (let i = 0; i < n; i++) {
@@ -541,7 +576,8 @@ function decomposeGiantSCCInternal(
   // Strategy:
   //   - The root node gets its own 1-state "hub" sub-chunk.
   //   - Each dominator branch is a sub-chunk; oversize ones are recursively
-  //     decomposed if we still have depth budget.
+  //     decomposed and the inner result is accepted only if it actually
+  //     made progress (Guard 2 below).
   //   - Unreachable nodes (pathological) get a catch-all sub-chunk.
   // ---------------------------------------------------------------------------
   const subChunks: Chunk[] = [];
@@ -577,11 +613,11 @@ function decomposeGiantSCCInternal(
 
   // Expand branches. For each, decide whether to recurse.
   for (const b of branches) {
-    if (b.indices.length <= subChunkMax || remainingDepth <= 0) {
+    if (b.indices.length <= subChunkMax) {
       emitSubChunk(b.indices, b.head);
       continue;
     }
-    // Oversize AND we have depth budget — recurse.
+    // Oversize — try to recurse.
     const branchStateIds = b.indices.map((i) => sccIds[i]!);
     const branchId = "scc_branch_" + djb2Hash(branchStateIds.slice().sort().join(","));
     const syntheticChunk: Chunk = {
@@ -597,9 +633,29 @@ function decomposeGiantSCCInternal(
       syntheticChunk,
       sccIds[b.head]!, // prefer branch head as inner root
       subChunkMax,
-      remainingDepth - 1,
     );
-    if (inner.degenerate) {
+    // -------------------------------------------------------------------------
+    // GUARD 2 — post-recursion progress check.
+    //
+    // The inner call's own Guard 1 may already have returned `degenerate`,
+    // in which case we obviously keep the branch as one big leaf. But Guard 1
+    // can be subtle to verify by inspection — so we *also* verify here that
+    // the inner result strictly shrunk the largest piece. If the biggest sub-
+    // chunk produced by recursion is still ≥ the input branch size, the work
+    // was wasted and we treat it the same as a degenerate result. This is
+    // belt-and-suspenders defence for infinite recursion.
+    // -------------------------------------------------------------------------
+    let innerMadeProgress = !inner.degenerate;
+    if (innerMadeProgress) {
+      let maxInnerSize = 0;
+      for (const sc of inner.subChunks) {
+        if (sc.stateIds.length > maxInnerSize) maxInnerSize = sc.stateIds.length;
+      }
+      if (maxInnerSize >= b.indices.length) {
+        innerMadeProgress = false;
+      }
+    }
+    if (!innerMadeProgress) {
       // Recursion couldn't split — keep the branch as one big sub-chunk.
       emitSubChunk(b.indices, b.head);
     } else {
