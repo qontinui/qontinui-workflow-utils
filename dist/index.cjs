@@ -2864,6 +2864,8 @@ function getElementLabel(elementId) {
 }
 var ACTION_LABELS = {
   click: "Click",
+  doubleClick: "Double Click",
+  rightClick: "Right Click",
   type: "Type",
   select: "Select",
   wait: "Wait",
@@ -2871,6 +2873,8 @@ var ACTION_LABELS = {
 };
 var ACTION_ACTIVE_LABELS = {
   click: "Clicking...",
+  doubleClick: "Double clicking...",
+  rightClick: "Right clicking...",
   type: "Typing...",
   select: "Selecting...",
   wait: "Waiting...",
@@ -2878,6 +2882,16 @@ var ACTION_ACTIVE_LABELS = {
 };
 var ACTION_COLOR_CONFIG = {
   click: {
+    text: "text-blue-400",
+    bg: "bg-blue-500/15",
+    border: "border-blue-500/30"
+  },
+  doubleClick: {
+    text: "text-blue-400",
+    bg: "bg-blue-500/15",
+    border: "border-blue-500/30"
+  },
+  rightClick: {
     text: "text-blue-400",
     bg: "bg-blue-500/15",
     border: "border-blue-500/30"
