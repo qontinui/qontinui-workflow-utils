@@ -73,6 +73,8 @@ export function describeTaskType(task: ScheduledTaskType): string {
       return `Watcher: ${task.watcher_id}`;
     case "BackgroundCapture":
       return `Background capture (every ${task.capture_interval_secs}s)`;
+    case "RemoteAgent":
+      return "Remote agent";
   }
 }
 
@@ -88,6 +90,10 @@ export function getSchedulerStatusColor(
       return "text-green-500";
     case "failed":
       return "text-red-500";
+    case "launch_failed":
+      return "text-orange-500";
+    case "missed_runner_down":
+      return "text-slate-500";
     case "skipped":
       return "text-yellow-500";
     case "cancelled":
