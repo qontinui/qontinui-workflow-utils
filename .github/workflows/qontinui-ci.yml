@@ -35,21 +35,52 @@ on:
       - 'merge-candidate-spec/**'
       - 'merge-candidate-batch/**'
   pull_request:
+
+# Least-privilege, stated explicitly rather than inherited from the repo-level
+# `default_workflow_permissions`. This job only reads the tree and runs npm; it
+# never writes back. publish.yml states its own (wider, OIDC-shaped) grant the
+# same way rather than inheriting.
+permissions:
+  contents: read
+
+# NOTE ON THE ABSENT `Lint` STEP. This file used to carry
+# `run: npm run lint --if-present`, which was a guaranteed no-op: package.json
+# declares no `lint` script and the repo has no ESLint config, so the step
+# exited 0 without linting anything while reporting a green "Lint" in every
+# run. Sibling package qontinui-workflow-ui states the same convention in its
+# own CI - invoke only the scripts that exist. Re-add this step in the SAME
+# change that adds the `lint` script and its config, never before.
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # v5 on both, matching publish.yml and the deliberate v4 -> v5 bump in
+      # ae4dc15. The retired coord onboarding template that seeded this file
+      # (44b93f8) pinned v4 and silently reverted that bump for this workflow.
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: '20'
+      # Bare `npm ci` - NOT the `npm ci || npm install` this replaces. That
+      # fallback swallowed the one failure the step exists to catch: a
+      # package-lock.json out of sync with package.json. publish.yml runs bare
+      # `npm ci`, so the fallback let CI go green on a lockfile that the release
+      # would then reject at publish time - the exact break repaired by b5bbab6,
+      # 7d11619 and c80549c. `.qontinui/config.yml` already lists both manifest
+      # paths under `escalate_paths`; CI should verify them, not paper over them.
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm ci
+      # `npm run typecheck`, not `npx --yes tsc --noEmit`. The package declares
+      # a `typecheck` script that nothing invoked. `npx --yes` will silently
+      # DOWNLOAD a TypeScript from the registry rather than fail, typechecking
+      # against a compiler other than the pinned `typescript` devDependency. The
+      # `if [ -f tsconfig.json ]` guard it replaces was both dead (the file is
+      # committed) and fail-open (a rename would have passed silently).
       - name: Type check
-        run: if [ -f tsconfig.json ]; then npx --yes tsc --noEmit; fi
-      - name: Lint
-        run: npm run lint --if-present
+        run: npm run typecheck
+      # `--if-present` dropped from build and test: both scripts exist, and the
+      # flag turned deleting either one into a silent green instead of a failure.
       - name: Build
-        run: npm run build --if-present
+        run: npm run build
       - name: Test
-        run: npm test --if-present
+        run: npm test
