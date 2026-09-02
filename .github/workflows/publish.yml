@@ -39,13 +39,61 @@ jobs:
         # Trusted Publishers requires 11.5.1+. Without this, the publish
         # step sends an empty auth header and gets 404 even when the
         # OIDC + provenance flow succeeds.
-        run: npm install --global npm@latest
+        #
+        # Pin to the 11.x line rather than `@latest`. `@latest` is a moving
+        # target: npm 12 shipped with
+        # `engines.node = ^22.22.2 || ^24.15.0 || >=26.0.0`, so on the node@20
+        # pinned above it aborts with EBADENGINE and the release never
+        # publishes. That is not hypothetical - qontinui/ui-bridge-auto, whose
+        # publish.yml this file mirrors, failed exactly here on its v0.1.8 tag
+        # (run 33299834877, 2026-08-30) while the identical v0.1.7 release had
+        # passed in May; the only thing that changed was what `@latest`
+        # resolved to. qontinui/ui-bridge hit the same wall on its 0.21.0 /
+        # 0.3.0 / 0.6.0 tags. Both pinned; this repo mirrors the same template
+        # and simply never received the fix.
+        #
+        # `npm@^11` supports node ^20.17.0 and is comfortably above the 11.5.1
+        # trusted-publishing floor, so it satisfies both constraints and cannot
+        # drift out from under us again.
+        run: npm install --global npm@^11
 
       - name: Install dependencies
         run: npm ci
 
+      # THE RELEASE PATH GATES ITSELF - it is the only thing that can.
+      #
+      # Until 2026-08-31 a `v*` tag push also fired `qontinui CI`, because that
+      # workflow was armed with the unfiltered `on: [push, pull_request]`.
+      # It never *gated* this job - the two runs raced - but it did record a
+      # typecheck/build/test verdict at the released SHA. Scoping that trigger to
+      # `master` + the `merge-candidate*` globs (#4, plan
+      # 2026-08-31-devops-unfiltered-push-trigger-duplicates-every-pr-ci-run) was
+      # correct and is not being undone here: restoring `tags:` there would
+      # recreate exactly the same-SHA duplicate that #4 removed, since the release
+      # commit is already on `master` and has already run.
+      #
+      # But it leaves a `v*` tag push firing NOTHING except this workflow, whose
+      # only step that could fail was `npm run build`. So the checks move HERE,
+      # where they are strictly stronger than what was lost: they run BEFORE
+      # `npm publish`, so a red typecheck or a failing test aborts the release
+      # rather than racing it. An `npm publish` is not retractable.
+      #
+      # Same checks in the same order as `qontinui-ci.yml`'s `build` job
+      # (install -> typecheck -> build -> test), so a release is gated on what a
+      # PR is gated on. Spelled as the package.json scripts, which are known to
+      # exist here. There is deliberately NO `Lint` step: this package declares
+      # no `lint` script and carries no ESLint config, and `qontinui-ci.yml` says
+      # in-file that the step is to be re-added in the SAME change that adds the
+      # script - a guaranteed-green step on the release path is the exact failure
+      # this block exists to remove.
+      - name: Type check
+        run: npm run typecheck
+
       - name: Build
         run: npm run build
+
+      - name: Test
+        run: npm test
 
       - name: Publish
         # --provenance generates an attestation linking the npm tarball
