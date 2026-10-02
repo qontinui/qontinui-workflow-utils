@@ -6,11 +6,18 @@
  */
 
 import type {
-  SkillCategory,
   SkillDefinition,
   WorkflowPhase,
 } from "@qontinui/shared-types/workflow";
 import { BUILTIN_SKILLS } from "./builtin-skills";
+
+/**
+ * A skill's category as the catalog actually holds it. shared-types publishes
+ * `SkillCategory` as the KNOWN vocabulary, but the runner reads categories back
+ * from user rows and imported payloads, so the field itself is open — key on
+ * the field's type, not on the vocabulary.
+ */
+type SkillCategoryValue = SkillDefinition["category"];
 
 // =============================================================================
 // Registry State
@@ -78,7 +85,7 @@ export function getSkillsByPhase(phase: WorkflowPhase): SkillDefinition[] {
  * Get all skills in a given category.
  */
 export function getSkillsByCategory(
-  category: SkillCategory,
+  category: SkillCategoryValue,
 ): SkillDefinition[] {
   return getAllSkills().filter((s) => s.category === category);
 }
@@ -86,8 +93,8 @@ export function getSkillsByCategory(
 /**
  * Get all unique categories present in the skill catalog.
  */
-export function getSkillCategories(): SkillCategory[] {
-  const categories = new Set<SkillCategory>();
+export function getSkillCategories(): SkillCategoryValue[] {
+  const categories = new Set<SkillCategoryValue>();
   for (const skill of getAllSkills()) {
     categories.add(skill.category);
   }
@@ -99,9 +106,9 @@ export function getSkillCategories(): SkillCategory[] {
 // =============================================================================
 
 export interface SkillSearchFilters {
-  category?: SkillCategory;
+  category?: SkillCategoryValue;
   phase?: WorkflowPhase;
-  source?: "builtin" | "user" | "community";
+  source?: SkillDefinition["source"];
   tags?: string[];
 }
 

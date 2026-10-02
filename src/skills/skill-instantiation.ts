@@ -138,6 +138,29 @@ export function instantiateSkill(
   phase: WorkflowPhase,
   paramValues: Record<string, unknown>,
 ): UnifiedStep[] {
+  if (skill.template.kind === "composition") {
+    throw new Error(
+      `Skill "${skill.name}" is a composition skill and cannot be directly instantiated`,
+    );
+  }
+
+  // Decide the template first, so a skill that can never produce steps is
+  // refused for that reason rather than for a parameter error. Only
+  // step-producing templates get past here. Anything else (a `playbook`,
+  // which injects domain knowledge into prompts and carries no steps, or a
+  // kind this build does not know) is refused rather than read as multi-step.
+  const template = skill.template;
+  let templateSteps: Record<string, unknown>[];
+  if (template.kind === "single_step") {
+    templateSteps = [template.step];
+  } else if (template.kind === "multi_step") {
+    templateSteps = template.steps;
+  } else {
+    throw new Error(
+      `Skill "${skill.name}" has a "${(template as { kind: string }).kind}" template, which produces no workflow steps`,
+    );
+  }
+
   if (!skill.allowed_phases.includes(phase)) {
     throw new Error(
       `Skill "${skill.name}" is not allowed in phase "${phase}". ` +
@@ -184,17 +207,6 @@ export function instantiateSkill(
     skill_slug: skill.slug,
     parameter_values: effectiveParams,
   };
-
-  if (skill.template.kind === "composition") {
-    throw new Error(
-      `Skill "${skill.name}" is a composition skill and cannot be directly instantiated`,
-    );
-  }
-
-  const templateSteps =
-    skill.template.kind === "single_step"
-      ? [skill.template.step]
-      : skill.template.steps;
 
   return templateSteps.map((templateStep, index) => {
     const resolved = resolveObject(templateStep, effectiveParams);
