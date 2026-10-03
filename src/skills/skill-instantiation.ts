@@ -140,7 +140,7 @@ export function instantiateSkill(
 ): UnifiedStep[] {
   if (skill.template.kind === "composition") {
     throw new Error(
-      `Skill "${skill.name}" is a composition skill and cannot be directly instantiated`,
+      `Skill "${skill.name}" is a composition skill and cannot be directly instantiated; use instantiateSkillSteps or instantiateComposition`,
     );
   }
 
@@ -233,7 +233,14 @@ export function instantiateSkill(
 /**
  * Instantiate a composition skill by resolving its skill_refs.
  *
- * Each SkillRef is looked up via `getSkill` and instantiated individually.
+ * The composition's own `allowed_phases` and `depends_on` are enforced, and its
+ * parameter defaults fill any value the caller left out. Each ref then sees,
+ * in rising precedence: its own parameter defaults, the caller's values and
+ * the composition's defaults, and the ref's `parameter_overrides`. Each SkillRef is looked up via `getSkill` and
+ * instantiated individually; a ref may itself be a composition, which is
+ * expanded in turn. A ref chain that leads back to a composition already being
+ * expanded is refused rather than recursed forever. A failure inside a ref is
+ * rethrown prefixed with the composition that reached it.
  * Returns all resulting steps flattened.
  */
 export function instantiateComposition(
@@ -241,23 +248,117 @@ export function instantiateComposition(
   phase: WorkflowPhase,
   paramValues: Record<string, unknown>,
 ): UnifiedStep[] {
+  return expandComposition(skill, phase, paramValues, []);
+}
+
+function expandComposition(
+  skill: SkillDefinition,
+  phase: WorkflowPhase,
+  paramValues: Record<string, unknown>,
+  expanding: string[],
+): UnifiedStep[] {
   if (skill.template.kind !== "composition") {
     throw new Error(`Skill "${skill.name}" is not a composition skill`);
   }
+  if (expanding.includes(skill.id)) {
+    throw new Error(
+      `Skill "${skill.name}" is part of a composition cycle: ${[...expanding, skill.id].join(" -> ")}`,
+    );
+  }
+  if (!skill.allowed_phases.includes(phase)) {
+    throw new Error(
+      `Skill "${skill.name}" is not allowed in phase "${phase}". ` +
+        `Allowed phases: ${skill.allowed_phases.join(", ")}`,
+    );
+  }
+  const missingDeps = validateDependencies(skill);
+  if (missingDeps.length > 0) {
+    throw new Error(
+      `Skill "${skill.name}" has missing dependencies: ${missingDeps.join(", ")}`,
+    );
+  }
+
+  const path = [...expanding, skill.id];
+  const compositionParams = {
+    ...paramValues,
+    ...buildEffectiveParams(skill, paramValues),
+  };
 
   const allSteps: UnifiedStep[] = [];
   for (const ref of skill.template.skill_refs) {
     const refSkill = getSkill(ref.skill_id);
     if (!refSkill) {
-      throw new Error(`Referenced skill not found: ${ref.skill_id}`);
+      throw new Error(
+        `In composition "${skill.name}": referenced skill not found: ${ref.skill_id}`,
+      );
     }
 
-    const mergedParams = { ...paramValues, ...ref.parameter_overrides };
-    const steps = instantiateSkill(refSkill, phase, mergedParams);
-    allSteps.push(...steps);
+    const mergedParams = { ...compositionParams, ...ref.parameter_overrides };
+    try {
+      const steps =
+        refSkill.template.kind === "composition"
+          ? expandComposition(refSkill, phase, mergedParams, path)
+          : instantiateSkill(refSkill, phase, mergedParams);
+      allSteps.push(...steps);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // `cause` set by hand: the ES2020 lib this package targets has no
+      // ErrorOptions constructor overload.
+      throw Object.assign(
+        new Error(`In composition "${skill.name}": ${message}`),
+        { cause: err },
+      );
+    }
   }
 
   return allSteps;
+}
+
+/**
+ * Whether a skill can be turned into workflow steps at all.
+ *
+ * `single_step` and `multi_step` templates produce steps; a `composition` does
+ * when every ref resolves in the registry and itself produces steps, with no
+ * cycle. A `playbook` (domain knowledge injected into prompts) and any
+ * template kind this build does not know do not. A catalog that offers skills
+ * for adding steps should list only skills this returns `true` for — the rest
+ * always make `instantiateSkillSteps` throw. This judges template kinds only:
+ * a listed skill can still be refused for its phase, its `depends_on` or its
+ * parameter values, and a template with no entries (`steps: []`, no refs)
+ * passes while yielding zero steps.
+ */
+export function skillProducesSteps(skill: SkillDefinition): boolean {
+  return producesSteps(skill, []);
+}
+
+function producesSteps(skill: SkillDefinition, expanding: string[]): boolean {
+  // Widened on purpose: the template may carry a kind (e.g. `playbook`) that
+  // the installed shared-types union does not list.
+  const kind: string = skill.template.kind;
+  if (kind === "single_step" || kind === "multi_step") return true;
+  if (skill.template.kind !== "composition") return false;
+  if (expanding.includes(skill.id)) return false;
+  const path = [...expanding, skill.id];
+  return skill.template.skill_refs.every((ref) => {
+    const refSkill = getSkill(ref.skill_id);
+    return refSkill !== undefined && producesSteps(refSkill, path);
+  });
+}
+
+/**
+ * Instantiate any step-producing skill: compositions go through
+ * `instantiateComposition`, everything else through `instantiateSkill`.
+ * This is the entry point a catalog should call; it throws for a skill
+ * `skillProducesSteps` rejects.
+ */
+export function instantiateSkillSteps(
+  skill: SkillDefinition,
+  phase: WorkflowPhase,
+  paramValues: Record<string, unknown>,
+): UnifiedStep[] {
+  return skill.template.kind === "composition"
+    ? instantiateComposition(skill, phase, paramValues)
+    : instantiateSkill(skill, phase, paramValues);
 }
 
 /**

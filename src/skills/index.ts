@@ -14,6 +14,8 @@ export type { SkillSearchFilters } from "./skill-registry";
 export {
   instantiateSkill,
   instantiateComposition,
+  instantiateSkillSteps,
+  skillProducesSteps,
   validateSkillParams,
   validateDependencies,
 } from "./skill-instantiation";
